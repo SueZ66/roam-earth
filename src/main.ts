@@ -71,6 +71,8 @@ async function boot(){
   const renderer=new THREE.WebGLRenderer({antialias:true,powerPreference:'high-performance'});
   renderer.setPixelRatio(Math.min(devicePixelRatio,innerWidth<760?1.5:1.75));
   renderer.shadowMap.enabled=true;renderer.shadowMap.type=THREE.PCFSoftShadowMap;
+  // Terrain, rocks and buildings are static: reuse their shadow map between scene changes.
+  renderer.shadowMap.autoUpdate=false;
   renderer.outputColorSpace=THREE.SRGBColorSpace;renderer.toneMapping=THREE.ACESFilmicToneMapping;
   renderer.domElement.setAttribute('aria-label','三维实景风景，可拖动观察和缩放');
   $('#viewport').appendChild(renderer.domElement);
@@ -112,6 +114,7 @@ async function boot(){
     const a=l.atmosphere!;world.fog=new THREE.FogExp2(a.fogColor,a.fogDensity);sun.position.copy(a.sunPosition);sun.color.set(a.sunColor??0xfff3de);sun.intensity=a.sunIntensity??2.6;
     sun.target.position.copy(view.target);renderer.toneMappingExposure=a.exposure??.86;world.backgroundRotation.y=a.skyRotation??0;world.environmentRotation.y=a.skyRotation??0;
     for(const object of l.group.children){if((object as unknown as {isWater?:boolean}).isWater){const w=object as THREE.Mesh<THREE.BufferGeometry,THREE.ShaderMaterial>;w.material.uniforms.sunDirection.value.copy(a.sunPosition).normalize();w.material.uniforms.sunColor.value.copy(sun.color);}}
+    renderer.shadowMap.needsUpdate=true;
     resize();
   }
   function updateJournal(){
@@ -138,7 +141,7 @@ async function boot(){
   function startExploring(){exploring=true;$('#markers').inert=false;document.body.classList.add('exploring');$('#start').innerHTML=`<span>查看旅行手记</span>${icons.arrow}`;updateJournal();toast('观察画面里的 01、02、03，留下你的风景印记。');}
   let switching=false;
   async function setScene(index:number){
-    if(index===activeIndex||switching)return;switching=true;setDrift(false);
+    if(index===activeIndex||switching)return;switching=true;setDrift(false);$('#markers').hidden=true;
     $('#scene-fade').classList.add('active');if(!reducedMotion)await new Promise(resolve=>setTimeout(resolve,240));
     world.remove(landscapes[activeIndex].group);activeIndex=index;world.add(landscapes[index].group);
     const scene=scenes[index];document.body.dataset.scene=scene.id;
@@ -146,7 +149,7 @@ async function boot(){
     $('#hero-description').innerHTML=scene.description.replace('\n','<br>');$('#world-number').textContent=`0${index+1}`;$('#region').textContent=scene.region;$('#coordinates').textContent=scene.coords;
     $('#field-code').textContent=scene.code;$('#field-title').textContent=scene.elevation;$('#location-label').textContent=scene.label;
     document.querySelectorAll<HTMLButtonElement>('.destination').forEach((button,i)=>{button.classList.toggle('selected',i===index);button.setAttribute('aria-pressed',String(i===index));});
-    applyView();createMarkers();updateJournal();renderer.render(world,camera);$('#scene-fade').classList.remove('active');switching=false;
+    applyView();createMarkers();updateJournal();await renderer.compileAsync(world,camera);renderer.render(world,camera);$('#scene-fade').classList.remove('active');switching=false;
   }
   function resize(){const w=innerWidth,h=innerHeight;renderer.setSize(w,h);camera.aspect=w/h;camera.fov=(landscapes[activeIndex].view?.fov??54)+(w<760?12:0);camera.clearViewOffset();camera.updateProjectionMatrix();$('.interaction-hint').textContent=w<760?'单指观察 · 双指缩放':'拖动观察 · 滚轮缩放';}
   window.addEventListener('resize',resize);
@@ -160,11 +163,11 @@ async function boot(){
   let resetPending=false;
   $('#reset-progress').addEventListener('click',()=>{if(!resetPending){resetPending=true;$('#reset-progress').textContent='再次点击，清空全部印记';setTimeout(()=>{resetPending=false;$('#reset-progress').textContent='重新探索';},4000);return;}collected.clear();try{localStorage.removeItem('roam-earth-journal-v2');}catch{/* optional */}resetPending=false;$('#reset-progress').textContent='重新探索';createMarkers();updateJournal();toast('新的旅程，从此刻开始。');});
   document.addEventListener('keydown',event=>{if(event.key==='Escape'&&clean){setClean(false);return;}const target=event.target as HTMLElement;if(document.querySelector('dialog[open]')||/INPUT|TEXTAREA|SELECT/.test(target.tagName)||target.isContentEditable||event.ctrlKey||event.altKey||event.metaKey)return;if(['1','2','3','4'].includes(event.key))void setScene(Number(event.key)-1);if(event.code==='Space'&&!/BUTTON|A/.test(target.tagName)){event.preventDefault();setDrift(!drifting);}});
-  applyView();createMarkers();updateJournal();
+  applyView();createMarkers();updateJournal();await renderer.compileAsync(world,camera);
   const clock=new THREE.Clock();
   let lastDraw=0;
   function frame(now=0){
-    requestAnimationFrame(frame);if(document.hidden){clock.getDelta();return;}
+    requestAnimationFrame(frame);if(document.hidden||switching){clock.getDelta();return;}
     if(now-lastDraw<1000/30)return;lastDraw=now;
     const delta=Math.min(clock.getDelta(),.05);realElapsed+=delta;if(naturalMotion)elapsed+=delta;
     landscapes[activeIndex].update(elapsed,naturalMotion?delta:0);
@@ -182,7 +185,7 @@ async function boot(){
       marker.style.left=`${x}px`;marker.style.top=`${y}px`;
       const visible=visibility[i]&&projected.z<1&&projected.z>-1&&x>24&&x<innerWidth-30&&y>100&&y<innerHeight-(innerWidth<760?185:145);
       marker.classList.toggle('occluded',!visible);marker.setAttribute('aria-hidden',String(!visible));marker.tabIndex=visible?0:-1;
-    });if(checkOcclusion)lastProjection=realElapsed;
+    });$('#markers').hidden=false;if(checkOcclusion)lastProjection=realElapsed;
   }
   frame();
   $('#loading').classList.add('loaded');setTimeout(()=>$('#loading').remove(),650);

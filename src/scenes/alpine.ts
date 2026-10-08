@@ -1,5 +1,7 @@
 import {
+  BufferGeometry,
   CanvasTexture,
+  CylinderGeometry,
   Color,
   DoubleSide,
   Euler,
@@ -8,6 +10,7 @@ import {
   IcosahedronGeometry,
   InstancedMesh,
   Matrix4,
+  Mesh,
   MeshStandardMaterial,
   PlaneGeometry,
   Quaternion,
@@ -15,7 +18,8 @@ import {
   Vector3,
 } from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
-import { createTerrain, createWater, fbm, noise2, seeded, terrainMaterial } from './nature';
+import { createTerrain, createWater, fbm, noise2, seeded } from './nature';
+import { detailMaterial, landscapeMaterial } from './surface';
 import type { Landscape } from './types';
 
 /** A continuous, metre-scale landscape inspired by the Matterhorn and its glacial lakes. */
@@ -28,17 +32,41 @@ export function createAlpine(): Landscape {
     return t * t * (3 - 2 * t);
   };
 
-  // Four unequal faces and off-axis ridges preserve the recognisable, leaning alpine silhouette.
+  // The summit is a set of unequal intersecting rock faces, with a narrow fore-arête.
+  // Angular drainage cuts converge towards the summit instead of making rounded noise mounds.
   function peak(x: number, z: number, cx: number, cz: number, radius: number, height: number, angle: number) {
-    const dx = x - cx;
-    const dz = z - cz;
+    const dx = x - cx, dz = z - cz;
     const rx = dx * Math.cos(angle) - dz * Math.sin(angle);
     const rz = dx * Math.sin(angle) + dz * Math.cos(angle);
-    const distance = Math.max(Math.abs(rx) * 0.89 + Math.abs(rz) * 0.17, Math.abs(rz) * 1.09 + Math.abs(rx) * 0.27);
+    const distance = Math.max(Math.abs(rx) * 0.88 + Math.abs(rz) * 0.19, Math.abs(rz) * 1.10 + Math.abs(rx) * 0.24);
     const envelope = Math.max(0, 1 - distance / radius);
-    const relief = fbm(x * 0.024, z * 0.024, 5) * 38;
-    const couloirs = (1 - Math.abs(noise2(rx * 0.033 + rz * 0.013, rz * 0.014))) * 11;
-    return Math.max(0, Math.pow(envelope, 1.72) * height + (relief - couloirs) * smoothstep(0, 0.25, envelope));
+    const drainage = Math.pow(0.5 + 0.5 * Math.sin(Math.atan2(rx, rz) * 19 + fbm(x * .014, z * .014, 3) * 1.7), 7);
+    const relief = fbm(x * .026, z * .026, 4) * 22 - drainage * 24;
+    return Math.max(0, Math.pow(envelope, 1.35) * height + relief * smoothstep(0, .27, envelope));
+  }
+  function matterhorn(x: number, z: number) {
+    const dx = x + 88, dz = z + 489;
+    const u = dx * .953 - dz * .303;
+    const v = dx * .303 + dz * .953;
+    const face = Math.max(u / 173, -u / 139, v / 339, -v / 196, (u * .81 + v * .59) / 263);
+    const mask = Math.max(0, 1 - face);
+    const pyramid = 427 * mask;
+    const angular = Math.atan2(dx, dz);
+    const drainage = Math.pow(.5 + .5 * Math.sin(angular * 26 + noise2(x * .011, z * .011) * 2.0), 9);
+    const lowerFace = smoothstep(.05, .36, mask) * (1 - smoothstep(.85, 1, mask));
+    const strataCoordinate = (pyramid + x * .19 + z * .095) / 16;
+    const strata = (strataCoordinate - Math.floor(strataCoordinate) - .5) * 3.8;
+    const crags = fbm(x * .037, z * .037, 4) * 7;
+    const cutFace = pyramid + (strata + crags - drainage * 20) * lowerFace;
+    // A long, fractured Hörnli-like ridge runs down the face towards the lake.
+    const ridgeT = Math.max(0, Math.min(1, (z + 489) / 360));
+    const ridgeAxis = -88 + ridgeT * 74 + Math.sin(ridgeT * 5.8) * 8;
+    const ridgeWidth = 9 + ridgeT * 69;
+    const ridgeEnvelope = Math.max(0, 1 - Math.abs(x - ridgeAxis) / ridgeWidth);
+    const foreRidge = z > -489 && z < -129
+      ? 397 * Math.pow(1 - ridgeT, 1.12) * ridgeEnvelope - drainage * 9 * lowerFace
+      : 0;
+    return Math.max(0, cutFace, foreRidge);
   }
 
   function lakeRadius(x: number, z: number) {
@@ -48,7 +76,8 @@ export function createAlpine(): Landscape {
     const foothills = Math.max(0, fbm(x * 0.0026 + 8, z * 0.0026 + 18, 5)) * 80;
     let height = 12 + foothills + fbm(x * 0.016, z * 0.016, 4) * 6;
     height += Math.max(
-      peak(x, z, -78, -468, 401, 425, 0.31),
+      matterhorn(x, z),
+      peak(x, z, -94, -486, 442, 245, 0.28),
       peak(x, z, -540, -627, 515, 335, -0.3),
       peak(x, z, 431, -541, 460, 307, 0.55),
       peak(x, z, 45, -960, 485, 358, -0.58),
@@ -64,67 +93,33 @@ export function createAlpine(): Landscape {
     return height;
   }
 
-  const rock = terrainMaterial('rock', 0xd9dedc);
-  const grass = terrainMaterial('grass', 0xffffff);
-  const snow = terrainMaterial('snow', 0xffffff);
-  rock.normalScale.set(0.34, 0.34);
-  rock.roughness = 0.96;
-  // Actual local photographic textures, projected in three directions over steep mountain faces.
-  // Snow gathers on ledges; altitude, aspect and irregular weathering break up the snow line.
-  rock.onBeforeCompile = (shader) => {
-    shader.uniforms.alpineGrass = { value: grass.map };
-    shader.uniforms.alpineSnow = { value: snow.map };
-    shader.vertexShader = shader.vertexShader
-      .replace('#include <common>', `#include <common>
-        varying vec3 vAlpinePosition;
-        varying vec3 vAlpineNormal;`)
-      .replace('#include <worldpos_vertex>', `#include <worldpos_vertex>
-        vAlpinePosition = (modelMatrix * vec4(transformed, 1.0)).xyz;
-        vAlpineNormal = normalize(mat3(modelMatrix) * objectNormal);`);
-    shader.fragmentShader = shader.fragmentShader
-      .replace('#include <common>', `#include <common>
-        varying vec3 vAlpinePosition;
-        varying vec3 vAlpineNormal;
-        uniform sampler2D alpineGrass;
-        uniform sampler2D alpineSnow;
-        float alpineHash(vec2 p) { return fract(sin(dot(p, vec2(127.1,311.7))) * 43758.5453); }
-        float alpineNoise(vec2 p) {
-          vec2 i = floor(p); vec2 f = fract(p); f = f*f*(3.0-2.0*f);
-          return mix(mix(alpineHash(i),alpineHash(i+vec2(1.,0.)),f.x),mix(alpineHash(i+vec2(0.,1.)),alpineHash(i+vec2(1.,1.)),f.x),f.y);
-        }
-        vec3 alpineTri(sampler2D t, vec3 p, vec3 w) {
-          return texture2D(t,p.yz).rgb*w.x + texture2D(t,p.xz).rgb*w.y + texture2D(t,p.xy).rgb*w.z;
-        }`)
-      .replace('#include <map_fragment>', `
-        vec3 terrainNormal = normalize(vAlpineNormal);
-        vec3 weights = pow(abs(terrainNormal), vec3(5.0));
-        weights /= weights.x + weights.y + weights.z;
-        vec3 position = vAlpinePosition;
-        float weathering = alpineNoise(position.xz * 0.036) * 0.65 + alpineNoise(position.xz * 0.13) * 0.35;
-        vec3 rockColor = alpineTri(map, position / 24.0, weights);
-        vec3 grassColor = alpineTri(alpineGrass, position / 28.0, weights) * vec3(0.8,0.87,0.74);
-        vec3 snowColor = min(vec3(1.0), alpineTri(alpineSnow, position / 19.0, weights) * 1.4 + vec3(0.2,0.23,0.26));
-        float grassy = (1.0-smoothstep(46.0,125.0,position.y)) * smoothstep(0.48,0.89,terrainNormal.y);
-        grassy *= smoothstep(8.0,18.0,position.y) * (0.65 + weathering*0.35);
-        float snowHeight = position.y + (weathering-0.5)*82.0 + terrainNormal.z*23.0;
-        float snowy = smoothstep(118.0,205.0,snowHeight) * smoothstep(0.17,0.59,terrainNormal.y);
-        vec3 groundColor = mix(rockColor, grassColor, grassy);
-        groundColor = mix(groundColor, snowColor, snowy);
-        diffuseColor.rgb *= groundColor;
-      `);
-  };
-  rock.customProgramCacheKey = () => 'alpine-triplanar-slope-snow-v1';
+  const rock = landscapeMaterial({ biome: 'alpine', tint: 0xeff2ef, scale: 22, normalStrength: 0.8 });
   const terrain = createTerrain({
     width: 2600,
     depth: 2600,
     centerZ: -310,
-    segments: 324,
+    segments: 344,
     height: heightAt,
     material: rock,
-    color: (_x, y, _z, slope) => new Color().setScalar(0.90 + Math.min(1, y / 450) * 0.10 - slope * 0.025),
+    color: (x, y, z, slope) => {
+      const bedding = .5 + .5 * Math.sin((y + x * .19 + z * .095) * .36);
+      const exposed = smoothstep(.28, .75, slope) * smoothstep(70, 160, y);
+      return new Color().setScalar(.95 - exposed * bedding * .04 + noise2(x * .01, z * .01) * .02);
+    },
   });
-  terrain.castShadow = false;
+  terrain.castShadow = true;
   group.add(terrain);
+  // Match shoreline props to the rendered triangles, not just the analytical height field.
+  const terrainPositions = terrain.geometry.getAttribute('position');
+  function surfaceHeight(x: number, z: number) {
+    const gx = Math.max(0, Math.min(343.99999, (x + 1300) / 2600 * 344));
+    const gz = Math.max(0, Math.min(343.99999, (z + 1610) / 2600 * 344));
+    const ix = Math.floor(gx), iz = Math.floor(gz), u = gx - ix, v = gz - iz;
+    const a = iz * 345 + ix, b = a + 345;
+    return u + v <= 1
+      ? terrainPositions.getY(a) * (1 - u - v) + terrainPositions.getY(a + 1) * u + terrainPositions.getY(b) * v
+      : terrainPositions.getY(b + 1) * (u + v - 1) + terrainPositions.getY(b) * (1 - u) + terrainPositions.getY(a + 1) * (1 - v);
+  }
 
   const lake = createWater({
     size: 880,
@@ -137,6 +132,46 @@ export function createAlpine(): Landscape {
   lake.position.x = -14;
   lake.position.z = 35;
   group.add(lake);
+
+  // Trace the true water contour, then feather a wet gravel ribbon into the dry shore.
+  function waterEdge(angle: number) {
+    let lo = .20, hi = 1.7;
+    for (let step = 0; step < 17; step++) {
+      const r = (lo + hi) * .5;
+      const x = -14 + Math.cos(angle) * 173 * r, z = 36 + Math.sin(angle) * 218 * r;
+      if (surfaceHeight(x, z) < 7.02) lo = r; else hi = r;
+    }
+    return (lo + hi) * .5;
+  }
+  const shoreVertices: number[] = [], shoreColors: number[] = [], shoreUvs: number[] = [], shoreIndices: number[] = [];
+  const shoreSegments = 280, shoreRings = 5;
+  for (let segment = 0; segment <= shoreSegments; segment++) {
+    const a = segment / shoreSegments * Math.PI * 2, edge = waterEdge(a);
+    const width = 3.6 + noise2(Math.cos(a) * 6, Math.sin(a) * 6) * 1.4;
+    for (let ring = 0; ring < shoreRings; ring++) {
+      const t = ring / (shoreRings - 1), radius = edge + (-1.1 + t * width) / 190;
+      const x = -14 + Math.cos(a) * 173 * radius, z = 36 + Math.sin(a) * 218 * radius;
+      const y = surfaceHeight(x, z);
+      shoreVertices.push(x, y + .065, z); shoreUvs.push(x / 4, z / 4);
+      const damp = 1 - smoothstep(7, 10.5, y);
+      const shade = .90 - damp * .24 + noise2(x * .38, z * .38) * .035;
+      shoreColors.push(shade * .93, shade, shade * .97);
+      if (segment < shoreSegments && ring < shoreRings - 1) {
+        const p = segment * shoreRings + ring, q = p + shoreRings;
+        shoreIndices.push(p, q, p + 1, q, q + 1, p + 1);
+      }
+    }
+  }
+  const shoreGeometry = new BufferGeometry();
+  shoreGeometry.setAttribute('position', new Float32BufferAttribute(shoreVertices, 3));
+  shoreGeometry.setAttribute('color', new Float32BufferAttribute(shoreColors, 3));
+  shoreGeometry.setAttribute('uv', new Float32BufferAttribute(shoreUvs, 2));
+  shoreGeometry.setIndex(shoreIndices); shoreGeometry.computeVertexNormals();
+  const wetGravel = detailMaterial('rock', 0xbcc7c0, 2.3);
+  wetGravel.roughness = .54;
+  const wetShore = new Mesh(shoreGeometry, wetGravel);
+  wetShore.receiveShadow = true; wetShore.userData.noOcclusion = true; group.add(wetShore);
+
 
   // Individually drawn needles on crossed, alpha-tested cards create airy, uneven tree outlines.
   // All trees of one variant are instanced in a single draw call.
@@ -186,16 +221,21 @@ export function createAlpine(): Landscape {
   });
   const treeGeometry = mergeGeometries(treeCards)!;
   treeCards.forEach((card) => card.dispose());
+  const foregroundTrees = [[142, 172, 13.5], [175, 116, 15], [203, 147, 11], [226, 58, 14], [-186, 75, 12], [-211, -3, 15.5], [193, -62, 13], [247, -113, 11.5], [277, 4, 14.5]];
   const treePlacements: Array<{ x: number; z: number; y: number; size: number; angle: number }> = [];
-  for (let attempt = 0; attempt < 4300 && treePlacements.length < 900; attempt++) {
+  for (let attempt = 0; attempt < 8000 && treePlacements.length < 1100; attempt++) {
     const x = (random() - 0.5) * 1150;
     const z = -360 + random() * 980;
     const y = heightAt(x, z);
+    if (foregroundTrees.some(([tx, tz]) => Math.hypot(x - tx, z - tz) < 12)) continue;
     const gradient = Math.hypot(heightAt(x + 1, z) - y, heightAt(x, z + 1) - y);
-    if (y < 10.5 || y > 105 || gradient > 0.8 || lakeRadius(x, z) < 1.04) continue;
+    if (y < 10.5 || y > 118 || gradient > 1.05 || lakeRadius(x, z) < 1.035) continue;
+    const grove = .5 + fbm(x * .016 + 51, z * .016 - 7, 3) * .75;
+    const density = smoothstep(.18, .66, grove) * (1 - smoothstep(48, 116, y));
+    if (random() > density) continue;
     if (x > -60 && x < 135 && z > 140 && z < 310) continue;
-    if (random() < Math.max(0, y - 45) / 90) continue;
-    treePlacements.push({ x, z, y, size: 5 + random() * 10, angle: random() * Math.PI });
+    const treeHeight = (5 + random() * 12) * (1 - smoothstep(55, 120, y) * .5);
+    treePlacements.push({ x, z, y, size: treeHeight, angle: random() * Math.PI });
   }
   const matrix = new Matrix4();
   const quaternion = new Quaternion();
@@ -221,6 +261,71 @@ export function createAlpine(): Landscape {
     group.add(trees);
   }
 
+
+  // Nearby trees have real tapered trunks and 45 drooping branches, with small crossed needle sprays.
+  // The detailed prototype is instanced only nine times; distant woods use the lighter cards above.
+  const woodPieces: BufferGeometry[] = [], foliagePieces: BufferGeometry[] = [];
+  const up = new Vector3(0, 1, 0);
+  const trunkGeometry = new CylinderGeometry(.045, .25, 10.4, 8, 6);
+  trunkGeometry.translate(0, 5.2, 0);
+  const trunkPositions = trunkGeometry.getAttribute('position');
+  for (let i = 0; i < trunkPositions.count; i++) {
+    const y = trunkPositions.getY(i);
+    trunkPositions.setX(i, trunkPositions.getX(i) + Math.pow(y / 10.4, 2) * .23);
+  }
+  trunkGeometry.computeVertexNormals(); woodPieces.push(trunkGeometry);
+  const needleCanvas = document.createElement('canvas'); needleCanvas.width = 256; needleCanvas.height = 128;
+  const needleContext = needleCanvas.getContext('2d')!; const needleRandom = seeded(24731);
+  needleContext.lineCap = 'round';
+  for (let shoot = 0; shoot < 7; shoot++) {
+    const by = 38 + shoot * 8, bend = (shoot - 3) * 6;
+    for (let n = 0; n < 64; n++) {
+      const t = n / 64, x = 8 + t * 238, y = by + Math.sin(t * 2.8) * bend;
+      needleContext.strokeStyle = ['#37503a', '#506346', '#68764f', '#314932'][Math.floor(needleRandom() * 4)];
+      needleContext.lineWidth = .8 + needleRandom();
+      const length = 4 + (1 - t) * 10 + needleRandom() * 6;
+      needleContext.beginPath(); needleContext.moveTo(x, y); needleContext.lineTo(x + 4, y - length); needleContext.stroke();
+      needleContext.beginPath(); needleContext.moveTo(x, y); needleContext.lineTo(x + 3, y + length * .75); needleContext.stroke();
+    }
+  }
+  const needleTexture = new CanvasTexture(needleCanvas); needleTexture.colorSpace = SRGBColorSpace; needleTexture.anisotropy = 4;
+  const branchRand = seeded(8083);
+  for (let level = 0; level < 9; level++) {
+    const y = 1.8 + level * .88, reach = 2.45 * Math.pow(1 - level / 10, .8);
+    for (let arm = 0; arm < 5; arm++) {
+      const phi = arm / 5 * Math.PI * 2 + level * 2.41 + branchRand() * .35;
+      const length = reach * (.80 + branchRand() * .33);
+      const start = new Vector3(.15 * y / 10, y, 0);
+      const end = new Vector3(Math.cos(phi) * length, y - .37 + level * .025, Math.sin(phi) * length);
+      const vector = end.clone().sub(start);
+      const branch = new CylinderGeometry(.013, .046 * (1 - level / 12), vector.length(), 5, 1);
+      branch.applyMatrix4(new Matrix4().compose(start.clone().add(end).multiplyScalar(.5), new Quaternion().setFromUnitVectors(up, vector.clone().normalize()), new Vector3(1, 1, 1)));
+      woodPieces.push(branch);
+      for (let spray = 0; spray < 4; spray++) {
+        const t = .20 + spray * .25, center = start.clone().lerp(end, t);
+        const width = (.8 + length * .23) * (1 - t * .22), height = .46 + (1 - t) * .26;
+        for (const crossing of [0, Math.PI / 2]) {
+          const card = new PlaneGeometry(width, height);
+          const q = new Quaternion().setFromEuler(new Euler(.26 + branchRand() * .22, phi + crossing, (branchRand() - .5) * .4));
+          card.applyMatrix4(new Matrix4().compose(center, q, new Vector3(1, 1, 1))); foliagePieces.push(card);
+        }
+      }
+    }
+  }
+  const detailedWood = mergeGeometries(woodPieces)!, detailedFoliage = mergeGeometries(foliagePieces)!;
+  woodPieces.forEach(g => g.dispose()); foliagePieces.forEach(g => g.dispose());
+  const nearbyWood = new InstancedMesh(detailedWood, new MeshStandardMaterial({ color: 0x716756, roughness: .99 }), foregroundTrees.length);
+  const nearbyFoliage = new InstancedMesh(detailedFoliage, new MeshStandardMaterial({ map: needleTexture, color: 0xd9dfca, alphaTest: .38, side: DoubleSide, roughness: 1 }), foregroundTrees.length);
+  foregroundTrees.forEach(([x, z, size], i) => {
+    quaternion.setFromEuler(new Euler(0, i * 2.37, (random() - .5) * .035));
+    matrix.compose(new Vector3(x, heightAt(x, z) - .10, z), quaternion, new Vector3(size / 10.4, size / 10.4, size / 10.4));
+    nearbyWood.setMatrixAt(i, matrix); nearbyFoliage.setMatrixAt(i, matrix);
+    nearbyFoliage.setColorAt(i, new Color().setScalar(.88 + random() * .17));
+  });
+  nearbyWood.castShadow = nearbyFoliage.castShadow = true;
+  nearbyWood.receiveShadow = nearbyFoliage.receiveShadow = true;
+  group.add(nearbyWood, nearbyFoliage);
+
   const stoneGeometry = new IcosahedronGeometry(1, 1);
   const stonePositions = stoneGeometry.getAttribute('position');
   for (let i = 0; i < stonePositions.count; i++) {
@@ -230,7 +335,7 @@ export function createAlpine(): Landscape {
   }
   stoneGeometry.computeVertexNormals();
   stoneGeometry.setAttribute('color', new Float32BufferAttribute(new Float32Array(stonePositions.count * 3).fill(1), 3));
-  const stoneMaterial = terrainMaterial('rock', 0xc4c6b7, 0.7);
+  const stoneMaterial = detailMaterial('rock', 0xd4d8cf, 3.1);
   const stones = new InstancedMesh(stoneGeometry, stoneMaterial, 175);
   let stoneIndex = 0;
   for (let attempt = 0; attempt < 1300 && stoneIndex < 175; attempt++) {
@@ -252,13 +357,33 @@ export function createAlpine(): Landscape {
   stones.instanceMatrix.needsUpdate = true;
   group.add(stones);
 
+  const pebbleGeometry = new IcosahedronGeometry(1, 0);
+  const pebblePositions = pebbleGeometry.getAttribute('position');
+  for (let i = 0; i < pebblePositions.count; i++) {
+    const x = pebblePositions.getX(i), y = pebblePositions.getY(i), z = pebblePositions.getZ(i);
+    const k = .90 + noise2(x * 3 + y, z * 4) * .17; pebblePositions.setXYZ(i, x * k, y * k, z * k);
+  }
+  pebbleGeometry.computeVertexNormals();
+  pebbleGeometry.setAttribute('color', new Float32BufferAttribute(new Float32Array(pebblePositions.count * 3).fill(1), 3));
+  const gravel = new InstancedMesh(pebbleGeometry, detailMaterial('rock', 0xd4dad2, 1.1), 1050);
+  for (let i = 0; i < gravel.count; i++) {
+    const a = random() * Math.PI * 2, edge = waterEdge(a), offset = -.3 + Math.pow(random(), 1.4) * 11;
+    const radius = edge + offset / 190, x = -14 + Math.cos(a) * 173 * radius, z = 36 + Math.sin(a) * 218 * radius;
+    const y = surfaceHeight(x, z), size = .12 + Math.pow(random(), 2.1) * .74;
+    position.set(x, y + size * .18, z); quaternion.setFromEuler(new Euler(random() * .4, random() * 6.28, random() * .3));
+    matrix.compose(position, quaternion, new Vector3(size * (1 + random() * .6), size * .46, size)); gravel.setMatrixAt(i, matrix);
+    const damp = 1 - smoothstep(7, 10, y); gravel.setColorAt(i, new Color().setScalar(.92 - damp * .23 + random() * .1));
+  }
+  gravel.castShadow = false; gravel.receiveShadow = true; group.add(gravel);
+
+
   return {
     heightAt,
     group,
     collectibles: [
-      { position: new Vector3(-70, 17, -100), name: '冰川湖畔', message: '细碎的岩粉悬浮在融水中，留下阿尔卑斯湖泊特有的青绿色。' },
+      { position: new Vector3(-35, 17, -100), name: '冰川湖畔', message: '细碎的岩粉悬浮在融水中，留下阿尔卑斯湖泊特有的青绿色。' },
       { position: new Vector3(-60, heightAt(-60, -320) + 22, -320), name: '马特洪峰', message: '以瑞士马特洪峰为灵感：冰川侵蚀塑造了锐利的山脊与不对称岩壁。' },
-      { position: new Vector3(179, heightAt(179, -48) + 15, -48), name: '林线之间', message: '针叶林沿山坡生长；越过林线，只剩岩石、积雪与风。' },
+      { position: new Vector3(60, heightAt(60, -220) + 20, -220), name: '林线之间', message: '针叶林沿山坡生长；越过林线，只剩岩石、积雪与风。' },
     ],
     view: {
       position: new Vector3(103, 43, 244),

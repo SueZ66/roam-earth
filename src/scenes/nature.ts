@@ -21,7 +21,7 @@ export function fbm(x: number, z: number, octaves = 5) {
   return sum / total;
 }
 
-function texture(name: string, color: boolean, repeat: number) {
+export function surfaceTexture(name: string, color = false, repeat = 1) {
   const key = `${name}-${repeat}`;
   if (textures.has(key)) return textures.get(key)!;
   let complete: () => void = () => {};
@@ -39,8 +39,9 @@ export async function waitForTerrainTextures() { await Promise.all(pending); ret
 
 export function terrainMaterial(kind: 'grass' | 'rock' | 'sand' | 'snow', tint = 0xffffff, repeat = 1) {
   return new THREE.MeshStandardMaterial({
-    color: tint, map: texture(`${kind}-diff`, true, repeat),
-    normalMap: texture(`${kind}-normal`, false, repeat),
+    color: tint, map: surfaceTexture(`${kind}-diff`, true, repeat),
+    normalMap: surfaceTexture(`${kind}-normal`, false, repeat),
+    roughnessMap: surfaceTexture(`${kind}-rough`, false, repeat),
     normalScale: new THREE.Vector2(kind === 'sand' ? 0.6 : 1.2, kind === 'sand' ? 0.6 : 1.2),
     roughness: kind === 'snow' ? 0.73 : 0.94, metalness: 0, vertexColors: true,
   });
@@ -73,6 +74,7 @@ export function createTerrain(options: TerrainOptions) {
   geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
   geometry.computeBoundingSphere();
   const mesh = new THREE.Mesh(geometry, options.material);
+  mesh.castShadow = true;
   mesh.receiveShadow = true;
   return mesh;
 }
@@ -112,12 +114,25 @@ export function createWater(options: { size?: number; height?: number; color?: n
     sunColor: 0xfff3df, waterColor: options.color ?? 0x135965, distortionScale: options.distortion ?? 3.4, fog: true,
   });
   water.rotation.x = -Math.PI / 2; water.position.y = options.height ?? 0;
-  water.material.uniforms.size.value = 3.6;
+  water.material.uniforms.size.value = 3.1;
+  water.material.vertexShader = 'varying vec2 vWaveSlope;\n' + water.material.vertexShader;
   water.material.vertexShader = water.material.vertexShader.replace('void main() {', `void main() {
     vec3 wavePosition = position;
-    wavePosition.z += ${amplitude.toFixed(3)} * (sin(position.x * 0.095 + position.y * 0.034 + time * 1.1) + 0.48 * sin(position.y * 0.14 - position.x * 0.022 + time * 1.46));
+    float w0=position.x*.095+position.y*.034+time*1.1;
+    float w1=position.y*.14-position.x*.022+time*1.46;
+    float w2=position.x*.044-position.y*.069+time*.76;
+    wavePosition.z += ${amplitude.toFixed(3)}*(sin(w0)+.48*sin(w1)+.27*sin(w2));
+    vWaveSlope=${amplitude.toFixed(3)}*vec2(.095*cos(w0)-.01056*cos(w1)+.01188*cos(w2),
+      .034*cos(w0)+.0672*cos(w1)-.01863*cos(w2));
   `).replaceAll('vec4( position, 1.0 )', 'vec4( wavePosition, 1.0 )');
-  water.material.fragmentShader = water.material.fragmentShader.replace('float rf0 = 0.3;', 'float rf0 = 0.045;');
+  water.material.fragmentShader = 'varying vec2 vWaveSlope;\n' + water.material.fragmentShader;
+  water.material.fragmentShader = water.material.fragmentShader
+    .replace('float rf0 = 0.3;', 'float rf0 = 0.025;')
+    .replace('vec3 surfaceNormal = normalize( noise.xzy * vec3( 1.5, 1.0, 1.5 ) );',
+      'vec3 surfaceNormal=normalize(vec3(-vWaveSlope.x,1.,vWaveSlope.y)+vec3(noise.x,0.,noise.y)*.92);')
+    .replace('100.0, 2.0, 0.5', '155.0, 1.5, 0.5')
+    .replace('vec3 scatter = max( 0.0, dot( surfaceNormal, eyeDirection ) ) * waterColor;',
+      'vec3 scatter = max(.18,dot(surfaceNormal,eyeDirection))*waterColor;\nscatter *= .88 + .12*sin(worldPosition.x*.012+worldPosition.z*.018);');
   water.userData.noOcclusion = true;
   return water;
 }

@@ -61,5 +61,33 @@
     "authorPage": "https://polyhaven.com/a/kloppenheim_06_puresky",
     "asset": "kloppenheim_06_puresky",
     "file": "sky.hdr"
+  },
+  {
+    "license": "CC0",
+    "source": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/coast_sand_01/coast_sand_01_rough_1k.jpg",
+    "authorPage": "https://polyhaven.com/a/coast_sand_01",
+    "asset": "coast_sand_01",
+    "file": "sand-rough.jpg"
+  },
+  {
+    "license": "CC0",
+    "source": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/snow_02/snow_02_rough_1k.jpg",
+    "authorPage": "https://polyhaven.com/a/snow_02",
+    "asset": "snow_02",
+    "file": "snow-rough.jpg"
+  },
+  {
+    "license": "CC0",
+    "source": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/rock_boulder_dry/rock_boulder_dry_rough_1k.jpg",
+    "authorPage": "https://polyhaven.com/a/rock_boulder_dry",
+    "asset": "rock_boulder_dry",
+    "file": "rock-rough.jpg"
+  },
+  {
+    "license": "CC0",
+    "source": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/aerial_grass_rock/aerial_grass_rock_rough_1k.jpg",
+    "authorPage": "https://polyhaven.com/a/aerial_grass_rock",
+    "asset": "aerial_grass_rock",
+    "file": "grass-rough.jpg"
   }
 ]
