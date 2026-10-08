@@ -1,0 +1,464 @@
+[
+  {
+    "kind": "grass",
+    "asset": "rocky_terrain_02",
+    "metres": 90.0,
+    "license": "CC0-1.0",
+    "page": "https://polyhaven.com/a/rocky_terrain_02",
+    "authors": {
+      "Amal Kumar": "All"
+    },
+    "published": 1726704000,
+    "sources": {
+      "diff": {
+        "size": 11328906,
+        "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/4k/rocky_terrain_02/rocky_terrain_02_diff_4k.jpg",
+        "md5": "74c19b8b0d8a1e23ee71baf1c5cb58e0"
+      },
+      "normal": {
+        "size": 4149208,
+        "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/rocky_terrain_02/rocky_terrain_02_nor_gl_2k.jpg",
+        "md5": "672bfdf5e7835fa369da6a5d1209026a"
+      },
+      "arm": {
+        "size": 1960945,
+        "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/rocky_terrain_02/rocky_terrain_02_arm_2k.jpg",
+        "md5": "d86dcfb1f4dcd8bc2c49f5cf28dd6cce"
+      },
+      "height": {
+        "size": 759583,
+        "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/rocky_terrain_02/rocky_terrain_02_disp_2k.jpg",
+        "md5": "1965b895b166c1aa2c0a2628b8111ba8"
+      }
+    },
+    "outputs": [
+      {
+        "file": "textures/pbr/desktop/grass-diff.webp",
+        "width": 4096,
+        "height": 4096,
+        "bytes": 3800916,
+        "sha256": "6d137c3c2bbafb7a1fa9a41a42bc32020aa817b5d12407d1dc684b52e1724a62"
+      },
+      {
+        "file": "textures/pbr/desktop/grass-normal.webp",
+        "width": 2048,
+        "height": 2048,
+        "bytes": 2006182,
+        "sha256": "8303fd427962555b753d14117f9354aca5151e2f21e608f006be1d155895a376"
+      },
+      {
+        "file": "textures/pbr/desktop/grass-surface.webp",
+        "width": 2048,
+        "height": 2048,
+        "bytes": 535632,
+        "sha256": "3427c763b4696f87db16f50f5baf89ae45e5357fce357652180c7360c620e998"
+      },
+      {
+        "file": "textures/pbr/mobile/grass-diff.webp",
+        "width": 1024,
+        "height": 1024,
+        "bytes": 342056,
+        "sha256": "013a25b9ca9561aeecb7a3dd02edb97bdfaf20aa02acb767732efeb1629e59b0"
+      },
+      {
+        "file": "textures/pbr/mobile/grass-normal.webp",
+        "width": 1024,
+        "height": 1024,
+        "bytes": 482978,
+        "sha256": "da65d9c940dbe01f7415e065a5543583c8b2b67b3526f7dfe0d1bff097136a20"
+      },
+      {
+        "file": "textures/pbr/mobile/grass-surface.webp",
+        "width": 1024,
+        "height": 1024,
+        "bytes": 178330,
+        "sha256": "557929e610ec1b8f3b57d088fceaeb7c48a0ad63dc3b9d84764475b65e237270"
+      }
+    ]
+  },
+  {
+    "kind": "rock",
+    "asset": "dark_rock_02",
+    "metres": 2.001,
+    "license": "CC0-1.0",
+    "page": "https://polyhaven.com/a/dark_rock_02",
+    "authors": {
+      "Amal Kumar": "All"
+    },
+    "published": 1784505600,
+    "sources": {
+      "diff": {
+        "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/4k/dark_rock_02/dark_rock_02_diff_4k.jpg",
+        "md5": "2e9156b7acb8025dd63d010fc56db4c7",
+        "size": 9601413
+      },
+      "normal": {
+        "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/dark_rock_02/dark_rock_02_nor_gl_2k.jpg",
+        "md5": "bfde991c327e33704686fb7ede0561a7",
+        "size": 3870014
+      },
+      "arm": {
+        "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/dark_rock_02/dark_rock_02_arm_2k.jpg",
+        "md5": "97fb8a2c3fcef2e1679c709c386311ca",
+        "size": 2575178
+      },
+      "height": {
+        "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/dark_rock_02/dark_rock_02_disp_2k.jpg",
+        "md5": "c99ac5efd7bf25184a024f92cb4cccb2",
+        "size": 609957
+      }
+    },
+    "outputs": [
+      {
+        "file": "textures/pbr/desktop/rock-diff.webp",
+        "width": 4096,
+        "height": 4096,
+        "bytes": 2546962,
+        "sha256": "82099d08fa2431a27a31481b215914c6b5c39f419123ffd2c21f64cf1e50e7de"
+      },
+      {
+        "file": "textures/pbr/desktop/rock-normal.webp",
+        "width": 2048,
+        "height": 2048,
+        "bytes": 1720390,
+        "sha256": "862991dfbbccfbac5af704ccdecf0f3a15ebf4377e12c43f77819a308d37e24c"
+      },
+      {
+        "file": "textures/pbr/desktop/rock-surface.webp",
+        "width": 2048,
+        "height": 2048,
+        "bytes": 830232,
+        "sha256": "baa40d623bc33970e8da5b0bf389400b7fa4e9c9ec237e4c5fe0f140b106b9bf"
+      },
+      {
+        "file": "textures/pbr/mobile/rock-diff.webp",
+        "width": 1024,
+        "height": 1024,
+        "bytes": 153112,
+        "sha256": "ab794024003f809ee94ef0fbae3acfd31083d30c17bb410b6b0fcd95c4fda60b"
+      },
+      {
+        "file": "textures/pbr/mobile/rock-normal.webp",
+        "width": 1024,
+        "height": 1024,
+        "bytes": 490494,
+        "sha256": "e3c509476be01018046a9a48dc9c649d6f552bf44cbdb3ca7147b6f8b0f05eae"
+      },
+      {
+        "file": "textures/pbr/mobile/rock-surface.webp",
+        "width": 1024,
+        "height": 1024,
+        "bytes": 225600,
+        "sha256": "e3cb5ff76d7e70a9fd0377b78048100229c845c8884c13872406b1371f3d5dff"
+      }
+    ]
+  },
+  {
+    "kind": "sand",
+    "asset": "damp_beach_sand_02",
+    "metres": 1.87,
+    "license": "CC0-1.0",
+    "page": "https://polyhaven.com/a/damp_beach_sand_02",
+    "authors": {
+      "Dimitrios Savva": "All"
+    },
+    "published": 1788220800,
+    "sources": {
+      "diff": {
+        "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/damp_beach_sand_02/damp_beach_sand_02_diff_2k.jpg",
+        "md5": "e8130af1d5af486472a859058ec8318a",
+        "size": 3384840
+      },
+      "normal": {
+        "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/damp_beach_sand_02/damp_beach_sand_02_nor_gl_2k.jpg",
+        "md5": "7bae886c5695bb414daa48d37d4eac50",
+        "size": 3253130
+      },
+      "arm": {
+        "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/damp_beach_sand_02/damp_beach_sand_02_arm_2k.jpg",
+        "md5": "01ca8a13d3c7a96f6c793b97af7bc43c",
+        "size": 3581252
+      },
+      "height": {
+        "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/damp_beach_sand_02/damp_beach_sand_02_disp_2k.jpg",
+        "md5": "6300d17021fd424bf2784a5e94795376",
+        "size": 882410
+      }
+    },
+    "outputs": [
+      {
+        "file": "textures/pbr/desktop/sand-diff.webp",
+        "width": 2048,
+        "height": 2048,
+        "bytes": 1479896,
+        "sha256": "874412daeb73de417c1d03d294617d1ad7350fb7d1fe73efeb0a7c59960951d0"
+      },
+      {
+        "file": "textures/pbr/desktop/sand-normal.webp",
+        "width": 2048,
+        "height": 2048,
+        "bytes": 1536968,
+        "sha256": "cdc399bef708ca36eaf5baab1fce67048f8c800c343e8c984fde6ef5bf6b8027"
+      },
+      {
+        "file": "textures/pbr/desktop/sand-surface.webp",
+        "width": 2048,
+        "height": 2048,
+        "bytes": 1781358,
+        "sha256": "235f12074798e33949c4b97072ef259cda2978d4b297fc58eb0191c1e8f0d30e"
+      },
+      {
+        "file": "textures/pbr/mobile/sand-diff.webp",
+        "width": 1024,
+        "height": 1024,
+        "bytes": 309738,
+        "sha256": "69153acbdf142adc8a9fe43a291e18f9f02bab0cdb5b041e8b383202f3b64bc4"
+      },
+      {
+        "file": "textures/pbr/mobile/sand-normal.webp",
+        "width": 1024,
+        "height": 1024,
+        "bytes": 284566,
+        "sha256": "c87358877ffd1f110de08d911fd9185ddd7846f0c82d17474f394ad5eb99256b"
+      },
+      {
+        "file": "textures/pbr/mobile/sand-surface.webp",
+        "width": 1024,
+        "height": 1024,
+        "bytes": 385314,
+        "sha256": "0979268d062e04e0be924c67a7249c56aead26b943647820e70442f7910a4902"
+      }
+    ]
+  },
+  {
+    "kind": "dune",
+    "asset": "sand_03",
+    "metres": 2.0,
+    "license": "CC0-1.0",
+    "page": "https://polyhaven.com/a/sand_03",
+    "authors": {
+      "Charlotte Baglioni": "All"
+    },
+    "published": 1715644800,
+    "sources": {
+      "diff": {
+        "size": 3353581,
+        "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/sand_03/sand_03_diff_2k.jpg",
+        "md5": "7732acef12dc23c8f7eda65f5cea0ab6"
+      },
+      "normal": {
+        "size": 3654915,
+        "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/sand_03/sand_03_nor_gl_2k.jpg",
+        "md5": "c87f87cc0cdf6c88fdc227b119f8a77b"
+      },
+      "arm": {
+        "size": 2454594,
+        "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/sand_03/sand_03_arm_2k.jpg",
+        "md5": "d2b68b22804d0f38ec6ef50fcc3aa40e"
+      },
+      "height": {
+        "size": 894671,
+        "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/sand_03/sand_03_disp_2k.jpg",
+        "md5": "7d7fe51a218c302e6005282617d849e0"
+      }
+    },
+    "outputs": [
+      {
+        "file": "textures/pbr/desktop/dune-diff.webp",
+        "width": 2048,
+        "height": 2048,
+        "bytes": 1489638,
+        "sha256": "0b9162adcc6bf1778ae48f8660c59719dedbd00f380cafadb9ec91fc2d7bddff"
+      },
+      {
+        "file": "textures/pbr/desktop/dune-normal.webp",
+        "width": 2048,
+        "height": 2048,
+        "bytes": 1676214,
+        "sha256": "fbd85ea3821bff1681aa34d7d23feaac10666a875dbc25b950a66fc4079d81c6"
+      },
+      {
+        "file": "textures/pbr/desktop/dune-surface.webp",
+        "width": 2048,
+        "height": 2048,
+        "bytes": 678678,
+        "sha256": "f40be56430856e5c512d178b52033aef2cbeb6cd1250758ca5f468f9052b6b8d"
+      },
+      {
+        "file": "textures/pbr/mobile/dune-diff.webp",
+        "width": 1024,
+        "height": 1024,
+        "bytes": 259020,
+        "sha256": "e0495253b6f558535fd04ebff761d06be36a422cc182fbe56c27964abea48c28"
+      },
+      {
+        "file": "textures/pbr/mobile/dune-normal.webp",
+        "width": 1024,
+        "height": 1024,
+        "bytes": 413374,
+        "sha256": "7f06e44b05d6c816302b3e962209855700e3a3f9c69c9045fc56987ee453a816"
+      },
+      {
+        "file": "textures/pbr/mobile/dune-surface.webp",
+        "width": 1024,
+        "height": 1024,
+        "bytes": 206486,
+        "sha256": "9afd2f8eba6b9ba261be52922b43d2a2d097195adb7f0160dacd4921f67c7b41"
+      }
+    ]
+  },
+  {
+    "kind": "snow",
+    "asset": "snow_02",
+    "metres": 2.0,
+    "license": "CC0-1.0",
+    "page": "https://polyhaven.com/a/snow_02",
+    "authors": {
+      "Rob Tuytel": "All"
+    },
+    "published": 1548806533,
+    "sources": {
+      "diff": {
+        "size": 1314409,
+        "md5": "5541e5601951b071691238ddc70632c0",
+        "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/snow_02/snow_02_diff_2k.jpg"
+      },
+      "normal": {
+        "size": 4761595,
+        "md5": "ef128fbdf1b31932c792eb6472c84574",
+        "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/snow_02/snow_02_nor_gl_2k.jpg"
+      },
+      "arm": {
+        "size": 390341,
+        "md5": "888201f385b78e06ddd205a352c8ce7d",
+        "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/snow_02/snow_02_arm_2k.jpg"
+      },
+      "height": {
+        "size": 432399,
+        "md5": "c7c8e7848b76819012cbac660a90a61c",
+        "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/snow_02/snow_02_disp_2k.jpg"
+      }
+    },
+    "outputs": [
+      {
+        "file": "textures/pbr/desktop/snow-diff.webp",
+        "width": 2048,
+        "height": 2048,
+        "bytes": 777684,
+        "sha256": "50acba63e0d80a5f27401c198d40835d6cca53bf4524773f7f16f10bda64ab3f"
+      },
+      {
+        "file": "textures/pbr/desktop/snow-normal.webp",
+        "width": 2048,
+        "height": 2048,
+        "bytes": 2340088,
+        "sha256": "44ccc2b6ecc1371fdb1d89b77d663c65729b5d971a7984dda2f76a58742cb443"
+      },
+      {
+        "file": "textures/pbr/desktop/snow-surface.webp",
+        "width": 2048,
+        "height": 2048,
+        "bytes": 508386,
+        "sha256": "03ff62b44d15541b2e4f9b56da647d5e152e06e6aedd0841244ff18f24a294b3"
+      },
+      {
+        "file": "textures/pbr/mobile/snow-diff.webp",
+        "width": 1024,
+        "height": 1024,
+        "bytes": 184332,
+        "sha256": "58640d5b97f7097984b721c151c0aac2a0edefb84ae524f6cf62e471ef16b1e6"
+      },
+      {
+        "file": "textures/pbr/mobile/snow-normal.webp",
+        "width": 1024,
+        "height": 1024,
+        "bytes": 542730,
+        "sha256": "790b532608bb64d9b59855254ef2fc7aef17e35a2ff6a4b5f9edcaadf4ae2400"
+      },
+      {
+        "file": "textures/pbr/mobile/snow-surface.webp",
+        "width": 1024,
+        "height": 1024,
+        "bytes": 158446,
+        "sha256": "d7a620154c5250240e9ae0330619ea130c0b94ae3153d992de723ac6e4c3f21c"
+      }
+    ]
+  },
+  {
+    "kind": "cliff",
+    "asset": "rocky_terrain",
+    "metres": 90.0,
+    "license": "CC0-1.0",
+    "page": "https://polyhaven.com/a/rocky_terrain",
+    "authors": {
+      "Amal Kumar": "All"
+    },
+    "published": 1723507200,
+    "sources": {
+      "diff": {
+        "size": 3287952,
+        "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/rocky_terrain/rocky_terrain_diff_2k.jpg",
+        "md5": "4abb5d65394b6af07752099bd34ddd02"
+      },
+      "normal": {
+        "size": 4149933,
+        "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/rocky_terrain/rocky_terrain_nor_gl_2k.jpg",
+        "md5": "05034535c6a4d24bf1886bd6331b9d39"
+      },
+      "arm": {
+        "size": 2272707,
+        "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/rocky_terrain/rocky_terrain_arm_2k.jpg",
+        "md5": "eaf3128113f818b0bd76237322eeeca4"
+      },
+      "height": {
+        "size": 843703,
+        "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/rocky_terrain/rocky_terrain_disp_2k.jpg",
+        "md5": "c5572f8643fa1afc5509e152d71a3b5e"
+      }
+    },
+    "outputs": [
+      {
+        "file": "textures/pbr/desktop/cliff-diff.webp",
+        "width": 2048,
+        "height": 2048,
+        "bytes": 1209798,
+        "sha256": "cbc15b065d6bbcbcee6242da762d7a872e498890e0c37c472fc0bf01ce50a61a"
+      },
+      {
+        "file": "textures/pbr/desktop/cliff-normal.webp",
+        "width": 2048,
+        "height": 2048,
+        "bytes": 1927910,
+        "sha256": "592a683bb0beafccff502a21dfe42d3fdfb86e11097b41e8cff4feae5395c4c1"
+      },
+      {
+        "file": "textures/pbr/desktop/cliff-surface.webp",
+        "width": 2048,
+        "height": 2048,
+        "bytes": 646786,
+        "sha256": "21fef36f298928d9e8a60407be701b1b1251f7e647b077bb040237c81507c771"
+      },
+      {
+        "file": "textures/pbr/mobile/cliff-diff.webp",
+        "width": 1024,
+        "height": 1024,
+        "bytes": 370620,
+        "sha256": "adec49ba7c76881a944a606f4875aa53bf8480bb38b4fd5e725dbf7a2bc83bf2"
+      },
+      {
+        "file": "textures/pbr/mobile/cliff-normal.webp",
+        "width": 1024,
+        "height": 1024,
+        "bytes": 491502,
+        "sha256": "25cd06f2d6ccb54d17988e5180bf1a3296739eb9eb6c4dab80f5605c5f7b406b"
+      },
+      {
+        "file": "textures/pbr/mobile/cliff-surface.webp",
+        "width": 1024,
+        "height": 1024,
+        "bytes": 207592,
+        "sha256": "271879e0e6ef3c1884d98c0d13415c343ef073aefab13943bc5dd8b69d62997c"
+      }
+    ]
+  }
+]

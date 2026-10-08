@@ -1,0 +1,58 @@
+{
+  "name": "Matterhorn–Riffelsee terrain reference",
+  "provider": "Mapzen Terrain Tiles hosted by AWS Open Data",
+  "format": "Terrarium RGB elevation, bilinearly resampled; quarter-metre quantization",
+  "sourceZoom": 13,
+  "reference": {
+    "latitude": 45.983333333333334,
+    "longitude": 7.762222222222222,
+    "nominalLakeElevation": 2757,
+    "lakeElevationSource": "https://en.wikipedia.org/wiki/Riffelsee"
+  },
+  "summitReference": {
+    "latitude": 45.97638888888889,
+    "longitude": 7.658611111111111,
+    "distanceFromLakeMeters": 8051.75481021244
+  },
+  "worldBounds": {
+    "x": [
+      -6000,
+      6000
+    ],
+    "z": [
+      -11500,
+      2000
+    ]
+  },
+  "gridSize": 601,
+  "sampling": "Local tangent-plane metre coordinates, oriented from Riffelsee toward Matterhorn. Public DEM sets the massif; the known 4478 m summit guides an artistic crest/gully refinement. Lake shore and foreground are compositional adaptations. Not a precise site survey or photogrammetric scan.",
+  "attribution": "Produced using Copernicus data and information funded by the European Union - EU-DEM layers. Global GMTED2010 and SRTM terrain data courtesy of the U.S. Geological Survey. Distributed through Mapzen Terrain Tiles.",
+  "attributionSource": "https://github.com/tilezen/joerd/blob/master/docs/attribution.md",
+  "tileUrls": [
+    "https://s3.amazonaws.com/elevation-tiles-prod/terrarium/13/4269/2913.png",
+    "https://s3.amazonaws.com/elevation-tiles-prod/terrarium/13/4269/2914.png",
+    "https://s3.amazonaws.com/elevation-tiles-prod/terrarium/13/4269/2915.png",
+    "https://s3.amazonaws.com/elevation-tiles-prod/terrarium/13/4269/2916.png",
+    "https://s3.amazonaws.com/elevation-tiles-prod/terrarium/13/4269/2917.png",
+    "https://s3.amazonaws.com/elevation-tiles-prod/terrarium/13/4270/2913.png",
+    "https://s3.amazonaws.com/elevation-tiles-prod/terrarium/13/4270/2914.png",
+    "https://s3.amazonaws.com/elevation-tiles-prod/terrarium/13/4270/2915.png",
+    "https://s3.amazonaws.com/elevation-tiles-prod/terrarium/13/4270/2916.png",
+    "https://s3.amazonaws.com/elevation-tiles-prod/terrarium/13/4270/2917.png",
+    "https://s3.amazonaws.com/elevation-tiles-prod/terrarium/13/4271/2913.png",
+    "https://s3.amazonaws.com/elevation-tiles-prod/terrarium/13/4271/2914.png",
+    "https://s3.amazonaws.com/elevation-tiles-prod/terrarium/13/4271/2915.png",
+    "https://s3.amazonaws.com/elevation-tiles-prod/terrarium/13/4271/2916.png",
+    "https://s3.amazonaws.com/elevation-tiles-prod/terrarium/13/4271/2917.png",
+    "https://s3.amazonaws.com/elevation-tiles-prod/terrarium/13/4272/2913.png",
+    "https://s3.amazonaws.com/elevation-tiles-prod/terrarium/13/4272/2914.png",
+    "https://s3.amazonaws.com/elevation-tiles-prod/terrarium/13/4272/2915.png",
+    "https://s3.amazonaws.com/elevation-tiles-prod/terrarium/13/4272/2916.png",
+    "https://s3.amazonaws.com/elevation-tiles-prod/terrarium/13/4272/2917.png",
+    "https://s3.amazonaws.com/elevation-tiles-prod/terrarium/13/4273/2913.png",
+    "https://s3.amazonaws.com/elevation-tiles-prod/terrarium/13/4273/2914.png",
+    "https://s3.amazonaws.com/elevation-tiles-prod/terrarium/13/4273/2915.png",
+    "https://s3.amazonaws.com/elevation-tiles-prod/terrarium/13/4273/2916.png",
+    "https://s3.amazonaws.com/elevation-tiles-prod/terrarium/13/4273/2917.png"
+  ]
+}

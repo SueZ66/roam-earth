@@ -5,6 +5,24 @@ export const assetManager = new THREE.LoadingManager();
 const textures = new Map<string, THREE.Texture>();
 const pending: Promise<void>[] = [];
 const failedAssets: string[] = [];
+// Choose once before constructing landscapes; mobile never downloads 4K maps.
+export const mobileQuality = typeof window !== 'undefined' &&
+  (window.matchMedia('(max-width: 760px)').matches || window.matchMedia('(pointer: coarse)').matches);
+
+export function pbrTexture(name: string, color = false) {
+  const key = `pbr-${name}-${color}`;
+  if (textures.has(key)) return textures.get(key)!;
+  let complete: () => void = () => {};
+  pending.push(new Promise<void>(resolve => { complete = resolve; }));
+  const tier = mobileQuality ? 'mobile' : 'desktop';
+  const value = new THREE.TextureLoader(assetManager).load(new URL(`textures/pbr/${tier}/${name}.webp`, document.baseURI).href,
+    () => complete(), undefined, () => { failedAssets.push(name); complete(); });
+  value.wrapS = value.wrapT = THREE.RepeatWrapping;
+  value.anisotropy = mobileQuality ? 4 : 16;
+  value.colorSpace = color ? THREE.SRGBColorSpace : THREE.NoColorSpace;
+  textures.set(key, value);
+  return value;
+}
 
 export function seeded(seed: number) {
   return () => { seed = (seed * 1664525 + 1013904223) >>> 0; return seed / 4294967296; };
@@ -36,6 +54,10 @@ export function surfaceTexture(name: string, color = false, repeat = 1) {
 }
 
 export async function waitForTerrainTextures() { await Promise.all(pending); return failedAssets; }
+
+export function trackLandscapeAsset(promise: Promise<unknown>, name: string) {
+  pending.push(promise.then(()=>{},()=>{failedAssets.push(name);}));
+}
 
 export function terrainMaterial(kind: 'grass' | 'rock' | 'sand' | 'snow', tint = 0xffffff, repeat = 1) {
   return new THREE.MeshStandardMaterial({
@@ -106,15 +128,19 @@ function getWaterNormals() {
   return waterNormals;
 }
 
-export function createWater(options: { size?: number; height?: number; color?: number; amplitude?: number; distortion?: number; sunDirection?: THREE.Vector3 } = {}) {
+export function createWater(options: {
+  size?: number; height?: number; color?: number; amplitude?: number; distortion?: number;
+  sunDirection?: THREE.Vector3; bottomColor?: number;
+  bathymetry?: {height:(x:number,z:number)=>number;bounds:[number,number,number,number]};
+} = {}) {
   const amplitude = options.amplitude ?? 0.35;
   const water = new Water(new THREE.PlaneGeometry(options.size ?? 3000, options.size ?? 3000, 160, 160), {
-    textureWidth: 512, textureHeight: 512, waterNormals: getWaterNormals(),
+    textureWidth: mobileQuality?512:1024, textureHeight: mobileQuality?512:1024, waterNormals: getWaterNormals(),
     sunDirection: options.sunDirection ?? new THREE.Vector3(-0.5, 0.65, -0.4).normalize(),
     sunColor: 0xfff3df, waterColor: options.color ?? 0x135965, distortionScale: options.distortion ?? 3.4, fog: true,
   });
   water.rotation.x = -Math.PI / 2; water.position.y = options.height ?? 0;
-  water.material.uniforms.size.value = 3.1;
+  water.material.uniforms.size.value = 5.5;
   water.material.vertexShader = 'varying vec2 vWaveSlope;\n' + water.material.vertexShader;
   water.material.vertexShader = water.material.vertexShader.replace('void main() {', `void main() {
     vec3 wavePosition = position;
@@ -129,10 +155,53 @@ export function createWater(options: { size?: number; height?: number; color?: n
   water.material.fragmentShader = water.material.fragmentShader
     .replace('float rf0 = 0.3;', 'float rf0 = 0.025;')
     .replace('vec3 surfaceNormal = normalize( noise.xzy * vec3( 1.5, 1.0, 1.5 ) );',
-      'vec3 surfaceNormal=normalize(vec3(-vWaveSlope.x,1.,vWaveSlope.y)+vec3(noise.x,0.,noise.y)*.92);')
+      `float p0=worldPosition.x*.095-worldPosition.z*.034+time*1.1;
+       float p1=-worldPosition.z*.14-worldPosition.x*.022+time*1.46;
+       float p2=worldPosition.x*.044+worldPosition.z*.069+time*.76;
+       vec2 slope=${amplitude.toFixed(3)}*vec2(.095*cos(p0)-.01056*cos(p1)+.01188*cos(p2),.034*cos(p0)+.0672*cos(p1)-.01863*cos(p2));
+       vec3 surfaceNormal=normalize(vec3(-slope.x,1.,slope.y)+vec3(noise.x,0.,noise.y)*${Math.min(.85,(options.distortion??3.4)*.20+.12).toFixed(3)});`)
     .replace('100.0, 2.0, 0.5', '155.0, 1.5, 0.5')
     .replace('vec3 scatter = max( 0.0, dot( surfaceNormal, eyeDirection ) ) * waterColor;',
       'vec3 scatter = max(.18,dot(surfaceNormal,eyeDirection))*waterColor;\nscatter *= .88 + .12*sin(worldPosition.x*.012+worldPosition.z*.018);');
+  // A locally sampled sea/lake bed gives true coastline-dependent optical depth.
+  // Sand remains visible in the shallows; wavelengths absorb at different rates.
+  if(options.bathymetry){
+    const {height,bounds}=options.bathymetry;
+    const resolution=mobileQuality?256:512, data=new Uint8Array(resolution*resolution*4);
+    for(let y=0;y<resolution;y++)for(let x=0;x<resolution;x++){
+      const wx=bounds[0]+x/(resolution-1)*(bounds[2]-bounds[0]);
+      const wz=bounds[1]+y/(resolution-1)*(bounds[3]-bounds[1]);
+      const depth=THREE.MathUtils.clamp((options.height??0)-height(wx,wz),0,60);
+      const n=Math.round(depth/60*65535),offset=(y*resolution+x)*4;
+      data[offset]=n>>8;data[offset+1]=n&255;data[offset+2]=0;data[offset+3]=255;
+    }
+    const texture=new THREE.DataTexture(data,resolution,resolution);
+    texture.minFilter=texture.magFilter=THREE.LinearFilter;texture.needsUpdate=true;
+    water.material.uniforms.bedDepth={value:texture};
+    water.material.uniforms.bedBounds={value:new THREE.Vector4(...bounds)};
+    water.material.uniforms.bottomColor={value:new THREE.Color(options.bottomColor??0xa7b19b)};
+    water.material.fragmentShader='uniform sampler2D bedDepth; uniform vec4 bedBounds; uniform vec3 bottomColor;\n'+water.material.fragmentShader;
+    water.material.fragmentShader=water.material.fragmentShader.replace('vec3 outgoingLight = albedo;',`
+      vec2 bedUV=(worldPosition.xz-bedBounds.xy)/(bedBounds.zw-bedBounds.xy);
+      vec2 depthPacked=texture2D(bedDepth,clamp(bedUV,0.,1.)).rg;
+      float bedMeters=dot(depthPacked,vec2(256.*255.,255.))/65535.*60.;
+      float withinBed=step(0.,bedUV.x)*step(0.,bedUV.y)*step(bedUV.x,1.)*step(bedUV.y,1.);
+      bedMeters=mix(60.,bedMeters,withinBed);
+      vec3 transmission=exp(-vec3(.23,.065,.045)*bedMeters/max(eyeDirection.y,.24));
+      float caustic=.96+.04*sin(worldPosition.x*1.7+time)*sin(worldPosition.z*1.3-time*.7);
+      vec3 shallow=bottomColor*transmission*caustic+waterColor*(1.-transmission);
+      vec3 outgoingLight=mix(shallow,reflectionSample,reflectance)+specularLight*.28;
+      ${amplitude>.1?`
+        float breaker=pow(max(0.,sin(time*.83-bedMeters*3.4+noise.x*2.)),18.);
+        float lace=smoothstep(-.25,.35,getNoise(worldPosition.xz*31.).x);
+        float shoreFoam=breaker*lace*(1.-smoothstep(.4,2.6,bedMeters))*smoothstep(.02,.22,bedMeters);
+        outgoingLight=mix(outgoingLight,vec3(.76,.83,.82),shoreFoam*.58);
+      `:''}
+    `);
+  }else{
+    water.material.fragmentShader=water.material.fragmentShader.replace('vec3 outgoingLight = albedo;',
+      'vec3 outgoingLight=mix(scatter,reflectionSample,reflectance)+specularLight*.28;');
+  }
   water.userData.noOcclusion = true;
   return water;
 }

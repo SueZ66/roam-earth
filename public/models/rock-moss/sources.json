@@ -1,0 +1,122 @@
+{
+  "asset": "rock_moss_set_01",
+  "title": "Rock Moss Set 01",
+  "provider": "Poly Haven",
+  "assetUrl": "https://polyhaven.com/a/rock_moss_set_01",
+  "filesApi": "https://api.polyhaven.com/files/rock_moss_set_01",
+  "license": "CC0-1.0",
+  "licenseUrl": "https://polyhaven.com/license",
+  "preparedAt": "2026-10-08T09:53:11.460361+00:00",
+  "runtimeEntry": "rock-moss.gltf",
+  "originalEntry": "rock_moss_set_01_2k.original.gltf",
+  "originals": [
+    {
+      "path": "rock_moss_set_01_2k.original.gltf",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Models/gltf/2k/rock_moss_set_01/rock_moss_set_01_2k.gltf",
+      "bytes": 9987,
+      "apiMd5": "c45cebb55c848a11233126f691557ca0",
+      "verifiedMd5": "c45cebb55c848a11233126f691557ca0",
+      "sha256": "794beaf2f4dc0ab155114f286049dc912a8f3287520965ca8bf6bb0d821ae3e2"
+    },
+    {
+      "path": "rock_moss_set_01.bin",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Models/gltf/8k/rock_moss_set_01/rock_moss_set_01.bin",
+      "bytes": 1466380,
+      "apiMd5": "207a51c9f56d34732e9814bbf9cc07b1",
+      "verifiedMd5": "207a51c9f56d34732e9814bbf9cc07b1",
+      "sha256": "de8360e6175879aaf02c171911069cf5f1852547f9ca7f10e440085dbcc3315e"
+    },
+    {
+      "path": "textures/rock_moss_set_01_diff_2k.jpg",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/2k/rock_moss_set_01/rock_moss_set_01_diff_2k.jpg",
+      "bytes": 649415,
+      "apiMd5": "d3e1292c9e34bd6b4a236698a1b41290",
+      "verifiedMd5": "d3e1292c9e34bd6b4a236698a1b41290",
+      "sha256": "bdee6da8baba67bd7e85e414e669cd46aab9afaf755114fb5163f0e68775c3d6"
+    },
+    {
+      "path": "textures/rock_moss_set_01_nor_gl_2k.jpg",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/2k/rock_moss_set_01/rock_moss_set_01_nor_gl_2k.jpg",
+      "bytes": 840957,
+      "apiMd5": "88be6d9cf2927a09182e2bfccc9b8b56",
+      "verifiedMd5": "88be6d9cf2927a09182e2bfccc9b8b56",
+      "sha256": "f11c238a203eebd5e82da3a50468040a78d25fd2e46783c4ad79b1022b144c0d"
+    },
+    {
+      "path": "textures/rock_moss_set_01_rough_2k.jpg",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/2k/rock_moss_set_01/rock_moss_set_01_rough_2k.jpg",
+      "bytes": 293827,
+      "apiMd5": "f7b3045b503fbde038598f8586ac25ef",
+      "verifiedMd5": "f7b3045b503fbde038598f8586ac25ef",
+      "sha256": "a05a8bd9f2563cf55b738484b894671df7b2391aa02d66451366c5ad38077cd2"
+    }
+  ],
+  "derived": [
+    {
+      "path": "textures/rock_moss_set_01_nor_gl_2k.webp",
+      "sourcePath": "textures/rock_moss_set_01_nor_gl_2k.jpg",
+      "sourceMd5": "88be6d9cf2927a09182e2bfccc9b8b56",
+      "derivedMd5": "a13b39a1f16fc8658b4341ab053789e7",
+      "sha256": "b10a9e2ee42e89348588aa1771be7d009cc2daa6e060c5e61d4b3c7ec558dadd",
+      "bytes": 1266428,
+      "dimensions": [
+        2048,
+        2048
+      ],
+      "conversion": {
+        "format": "WebP",
+        "quality": 96,
+        "method": 6
+      }
+    },
+    {
+      "path": "textures/rock_moss_set_01_diff_2k.webp",
+      "sourcePath": "textures/rock_moss_set_01_diff_2k.jpg",
+      "sourceMd5": "d3e1292c9e34bd6b4a236698a1b41290",
+      "derivedMd5": "6287940eefb9e3ee464b1918c3078233",
+      "sha256": "c37bc0d8e84943ff4970355dd3baf20236898e90c2fa34ca8c8b8fee3fc6b7b7",
+      "bytes": 629526,
+      "dimensions": [
+        2048,
+        2048
+      ],
+      "conversion": {
+        "format": "WebP",
+        "quality": 90,
+        "method": 6
+      }
+    },
+    {
+      "path": "textures/rock_moss_set_01_rough_2k.webp",
+      "sourcePath": "textures/rock_moss_set_01_rough_2k.jpg",
+      "sourceMd5": "f7b3045b503fbde038598f8586ac25ef",
+      "derivedMd5": "a2ffd3cad503d716735b4853402386db",
+      "sha256": "03af360b033fcd7cc1427cabde54facb4cdfdfb29985f2bffadd3906ed182060",
+      "bytes": 170550,
+      "dimensions": [
+        2048,
+        2048
+      ],
+      "conversion": {
+        "format": "WebP",
+        "quality": 90,
+        "method": 6
+      }
+    },
+    {
+      "path": "rock-moss.gltf",
+      "sourcePath": "rock_moss_set_01_2k.original.gltf",
+      "sourceMd5": "c45cebb55c848a11233126f691557ca0",
+      "derivedMd5": "77a2889fcb8b070dc21358f18b2cc341",
+      "sha256": "ca5ac1d8f93bde911b4ec6754d4dfa15e54bd8eb8274ff1ae4220ab2f656582a",
+      "bytes": 10317,
+      "conversion": "Original scene and geometry; texture references changed to EXT_texture_webp."
+    }
+  ],
+  "notes": [
+    "All original files were checked against the byte sizes and MD5 hashes returned by the Poly Haven files API.",
+    "Geometry and node transforms are unchanged. Original JPEG textures and original glTF are retained.",
+    "WebP textures are 2048 x 2048; normal map encoding is OpenGL as provided by the asset.",
+    "Preparation script: scripts/prepare-rock-moss.py. Requires Python 3 and Pillow."
+  ]
+}

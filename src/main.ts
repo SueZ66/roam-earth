@@ -1,11 +1,12 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { HDRLoader } from 'three/addons/loaders/HDRLoader.js';
+import { CSM } from 'three/addons/csm/CSM.js';
 import { createMeadow } from './scenes/meadow';
 import { createAlpine } from './scenes/alpine';
 import { createDesert } from './scenes/desert';
 import { createCoast } from './scenes/coast';
-import { waitForTerrainTextures } from './scenes/nature';
+import { waitForTerrainTextures, mobileQuality, assetManager } from './scenes/nature';
 import { Soundscape } from './audio';
 import './style.css';
 
@@ -20,7 +21,7 @@ const icons = {
 };
 const scenes = [
   {id:'coast', title:'Lofoten Coast', line:'Lofoten<br>Coast.', zh:'罗弗敦海岸', country:'挪威 · 豪克兰湾', biome:'北极圈海岸', code:'NO', region:'NORWEGIAN SEA', coords:'68°12′ N / 13°32′ E', elevation:'潮汐与群山之间', time:'15:06', description:'海水推向白沙，浪花沿岸线慢慢展开。\n让目光越过海面，去往挪威海的深蓝。', label:'HAUKLAND BEACH · NORWAY', create:createCoast},
-  {id:'meadow', title:'Faroe Islands', line:'Faroe<br>Islands.', zh:'法罗群岛', country:'丹麦 · 北大西洋', biome:'北欧草甸', code:'FO', region:'NORTH ATLANTIC', coords:'62°05′ N / 06°55′ W', elevation:'海风与草甸', time:'16:24', description:'越过起伏的草甸，海风抵达山谷。\n在北大西洋的边缘，留一段时间给旷野。', label:'GÁSADALUR · FAROE ISLANDS', create:createMeadow},
+  {id:'meadow', title:'Faroe Islands', line:'Faroe<br>Islands.', zh:'法罗群岛', country:'丹麦 · 北大西洋', biome:'北欧草甸', code:'FO', region:'NORTH ATLANTIC', coords:'62°06′ N / 07°26′ W', elevation:'海风与草甸', time:'16:24', description:'越过起伏的草甸，海风抵达山谷。\n在北大西洋的边缘，留一段时间给旷野。', label:'GÁSADALUR · FAROE ISLANDS', create:createMeadow},
   {id:'alpine', title:'The Swiss Alps', line:'The Swiss<br>Alps.', zh:'阿尔卑斯山', country:'瑞士 · 采尔马特', biome:'冰川山地', code:'CH', region:'CENTRAL EUROPE', coords:'45°58′ N / 07°39′ E', elevation:'雪线之上', time:'10:18', description:'岩壁向天空生长，积雪沿着山脊留下。\n湖面映着阿尔卑斯山，也映着此刻的安静。', label:'MATTERHORN REGION · SWITZERLAND', create:createAlpine},
   {id:'desert', title:'The Sahara', line:'The<br>Sahara.', zh:'撒哈拉沙漠', country:'摩洛哥 · 梅尔祖卡', biome:'风成沙丘', code:'MA', region:'NORTH AFRICA', coords:'31°06′ N / 04°01′ W', elevation:'风留下的曲线', time:'17:48', description:'沙丘随光线显露纹理，脊线向远方延伸。\n在撒哈拉，没有两阵完全相同的风。', label:'ERG CHEBBI · MOROCCO', create:createDesert},
 ];
@@ -44,7 +45,7 @@ $('#app').innerHTML = `
   <div class="loading" id="loading"><span class="loading-brand">roam.</span><div class="loading-line"><span></span></div><p id="loading-status">正在抵达，世界的另一面。</p><small>FOUR PLACES. ONE PLANET.</small></div>
   <dialog id="journal" aria-labelledby="journal-title"><button class="dialog-close icon-button" aria-label="关闭旅行手记">${icons.close}</button><span class="section-kicker">YOUR FIELD JOURNAL</span><h2 id="journal-title">把远方，留在手记里。</h2><p class="journal-summary"><span id="journal-total">0</span> / 12 处风景印记</p><div id="journal-content"></div><p class="dialog-footnote">记录保存在此浏览器。无需账号，随时回来。</p><button class="text-button" id="reset-progress">重新探索</button></dialog>
   <dialog id="help" aria-labelledby="help-title"><button class="dialog-close icon-button" aria-label="关闭操作指南">${icons.close}</button><span class="section-kicker">A SLOWER WAY TO SEE</span><h2 id="help-title">给风景，多一点时间。</h2><div class="help-steps"><p><b>01</b><span><strong>选择一处远方</strong>下方切换四个目的地，键盘 1–4 也可以。</span></p><p><b>02</b><span><strong>换一个观察角度</strong>拖动观察、滚轮缩放，手机单指拖动、双指缩放。相机限制在安全的观景区域。</span></p><p><b>03</b><span><strong>留下风景印记</strong>点击「探索这片风景」后，寻找画面里的编号观察点。每个目的地有 3 处。</span></p><p><b>04</b><span><strong>只看山海</strong>开启纯净视野，或点击相机按钮保存当前画面。自然动态和镜头巡游可分别暂停。</span></p></div><p class="dialog-footnote">空格：镜头巡游 · Esc：退出纯净视野<br>环境音默认关闭，右上角可开启。</p><button class="solid-button" id="help-done">出发 ${icons.arrow}</button></dialog>
-  <dialog id="about" aria-labelledby="about-title"><button class="dialog-close icon-button" aria-label="关闭关于旅途">${icons.close}</button><span class="section-kicker">ROAM / THE EARTH COLLECTION</span><h2 id="about-title">从真实的地方，<br>开始一场漫游。</h2><p class="about-copy">北大西洋的草甸、阿尔卑斯的雪峰、撒哈拉的沙丘，以及挪威海的浪。四处自然风景，是这次旅途的起点。</p><p class="about-copy">这些三维场景参考当地地貌进行创作，坐标指向灵感地点，不是当地精确测绘或实时天气。地表与天空使用 Poly Haven 的 CC0 实景素材。</p><a class="credit-link" href="https://polyhaven.com" target="_blank" rel="noreferrer">素材鸣谢 · Poly Haven ↗</a></dialog>
+  <dialog id="about" aria-labelledby="about-title"><button class="dialog-close icon-button" aria-label="关闭关于旅途">${icons.close}</button><span class="section-kicker">ROAM / THE EARTH COLLECTION</span><h2 id="about-title">从真实的地方，<br>开始一场漫游。</h2><p class="about-copy">北大西洋的草甸、阿尔卑斯的雪峰、撒哈拉的沙丘，以及挪威海的浪。四处自然风景，是这次旅途的起点。</p><p class="about-copy">海岸、草甸和雪山参考公开高程地形，近景岸线与植被经过艺术化细化；它们不是精确数字孪生或实时天气。地表、天空与摄影测量岩石来自 Poly Haven。</p><a class="credit-link" href="https://polyhaven.com" target="_blank" rel="noreferrer">素材鸣谢 · Poly Haven ↗</a><a class="credit-link" href="https://github.com/SueZ66/roam-earth/blob/main/CREDITS.md" target="_blank" rel="noreferrer">地形来源 · © Kartverket / Mapzen 及数据提供方 ↗</a></dialog>
 `;
 document.body.dataset.scene=scenes[0].id;
 let toastTimer=0;
@@ -69,32 +70,51 @@ $('#view-toggle').addEventListener('click',()=>setClean(true));$('#clean-exit').
 
 async function boot(){
   const renderer=new THREE.WebGLRenderer({antialias:true,powerPreference:'high-performance'});
-  renderer.setPixelRatio(Math.min(devicePixelRatio,innerWidth<760?1.5:1.75));
+  renderer.setPixelRatio(Math.min(devicePixelRatio,mobileQuality?1.5:2));
   renderer.shadowMap.enabled=true;renderer.shadowMap.type=THREE.PCFSoftShadowMap;
   // Terrain, rocks and buildings are static: reuse their shadow map between scene changes.
   renderer.shadowMap.autoUpdate=false;
-  renderer.outputColorSpace=THREE.SRGBColorSpace;renderer.toneMapping=THREE.ACESFilmicToneMapping;
+  renderer.outputColorSpace=THREE.SRGBColorSpace;renderer.toneMapping=THREE.AgXToneMapping;
   renderer.domElement.setAttribute('aria-label','三维实景风景，可拖动观察和缩放');
   $('#viewport').appendChild(renderer.domElement);
   const world=new THREE.Scene();
   world.background=new THREE.Color(0xa8bbc4);
-  const camera=new THREE.PerspectiveCamera(54,1,0.8,6500);
+  const camera=new THREE.PerspectiveCamera(54,1,0.2,16000);
   const controls=new OrbitControls(camera,renderer.domElement);
   controls.enableDamping=true;controls.dampingFactor=.07;controls.enablePan=false;controls.rotateSpeed=.3;controls.zoomSpeed=.55;
-  const hemi=new THREE.HemisphereLight(0xc2d7e4,0x615b45,.8);world.add(hemi);
-  const sun=new THREE.DirectionalLight(0xfff3de,2.8);sun.castShadow=true;sun.shadow.mapSize.set(2048,2048);
-  Object.assign(sun.shadow.camera,{left:-450,right:450,top:450,bottom:-450,near:1,far:2100});sun.shadow.normalBias=.45;sun.shadow.bias=-.00015;world.add(sun);world.add(sun.target);
+  const hemi=new THREE.HemisphereLight(0xd9e5f0,0x74694e,.24);world.add(hemi);
+  const csm=new CSM({camera,parent:world,cascades:mobileQuality?2:3,maxFar:11000,
+    mode:'custom',customSplitsCallback:(count,_near,far,breaks)=>{
+      if(count===2)breaks.push(350/far,1);else breaks.push(120/far,1250/far,1);
+    },shadowMapSize:mobileQuality?1024:2048,shadowBias:-.000002,
+    lightDirection:new THREE.Vector3(.5,-.7,.4).normalize(),lightIntensity:2.8,
+    lightNear:.1,lightFar:24000,lightMargin:9000});
+  csm.fade=true;
+  csm.lights.forEach((light,i)=>{light.shadow.normalBias=[.055,.18,1.2][i];light.shadow.radius=2;});
   $('#loading-status').textContent='正在展开山脊、海岸和地平线。';
+  assetManager.onProgress=(_url,loaded,total)=>{$('#loading-status').textContent=`正在载入地形与实景材质 · ${Math.round(loaded/total*100)}%`;};
   const landscapes=scenes.map(s=>s.create());
+  const shadowMaterials=new Set<THREE.Material>();
+  const prepareShadowMaterials=()=>landscapes.forEach(landscape=>landscape.group.traverse(object=>{
+    if(!(object instanceof THREE.Mesh))return;
+    for(const material of Array.isArray(object.material)?object.material:[object.material]){
+      if(!(material instanceof THREE.MeshStandardMaterial)||shadowMaterials.has(material))continue;
+      const original=material.onBeforeCompile,originalKey=material.customProgramCacheKey();csm.setupMaterial(material);const shadowHook=material.onBeforeCompile;
+      material.onBeforeCompile=(shader,context)=>{original.call(material,shader,context);shadowHook.call(material,shader,context);};
+      material.customProgramCacheKey=()=>`${originalKey}-csm`;
+      shadowMaterials.add(material);
+    }
+  }));
   world.add(landscapes[0].group);
   let sky:THREE.DataTexture|undefined;
   try{
-    sky=await new HDRLoader().loadAsync(new URL('textures/sky.hdr',document.baseURI).href);
+    sky=await new HDRLoader().loadAsync(new URL(`textures/${mobileQuality?'sky-mobile':'sky-4k'}.hdr`,document.baseURI).href);
     sky.mapping=THREE.EquirectangularReflectionMapping;
     const pmrem=new THREE.PMREMGenerator(renderer);const environment=pmrem.fromEquirectangular(sky);
-    world.environment=environment.texture;world.environmentIntensity=.52;world.background=sky;world.backgroundIntensity=.75;world.backgroundBlurriness=.02;pmrem.dispose();
+    world.environment=environment.texture;world.environmentIntensity=.60;world.background=sky;world.backgroundIntensity=.86;world.backgroundBlurriness=0;pmrem.dispose();
   }catch{toast('天空素材未载入，已使用基础天空。');}
   const failed=await waitForTerrainTextures();if(failed.length)toast('部分地表素材未载入，可刷新页面重试。');
+  prepareShadowMaterials();
   let elapsed=0,realElapsed=0,lastProjection=0;
   const initialCamera=new THREE.Vector3(),baseOffset=new THREE.Vector3(),projected=new THREE.Vector3();
   const raycaster=new THREE.Raycaster();const direction=new THREE.Vector3();
@@ -111,9 +131,11 @@ async function boot(){
     controls.minPolarAngle=Math.max(.1,spherical.phi-(view.polarRange??.06));controls.maxPolarAngle=Math.min(Math.PI-.1,spherical.phi+(view.polarRange??.035));
     controls.minAzimuthAngle=spherical.theta-(view.azimuthRange??.36);controls.maxAzimuthAngle=spherical.theta+(view.azimuthRange??.36);
     controls.update();baseOffset.copy(camera.position).sub(controls.target);
-    const a=l.atmosphere!;world.fog=new THREE.FogExp2(a.fogColor,a.fogDensity);sun.position.copy(a.sunPosition);sun.color.set(a.sunColor??0xfff3de);sun.intensity=a.sunIntensity??2.6;
-    sun.target.position.copy(view.target);renderer.toneMappingExposure=a.exposure??.86;world.backgroundRotation.y=a.skyRotation??0;world.environmentRotation.y=a.skyRotation??0;
-    for(const object of l.group.children){if((object as unknown as {isWater?:boolean}).isWater){const w=object as THREE.Mesh<THREE.BufferGeometry,THREE.ShaderMaterial>;w.material.uniforms.sunDirection.value.copy(a.sunPosition).normalize();w.material.uniforms.sunColor.value.copy(sun.color);}}
+    const a=l.atmosphere!;world.fog=new THREE.FogExp2(a.fogColor,a.fogDensity);
+    csm.lightDirection.copy(a.sunPosition).normalize().negate();
+    csm.lights.forEach(light=>{light.color.set(a.sunColor??0xfff3de);light.intensity=a.sunIntensity??2.6;});
+    renderer.toneMappingExposure=(a.exposure??.86)*1.08;world.backgroundRotation.y=a.skyRotation??0;world.environmentRotation.y=a.skyRotation??0;
+    for(const object of l.group.children){if((object as unknown as {isWater?:boolean}).isWater){const w=object as THREE.Mesh<THREE.BufferGeometry,THREE.ShaderMaterial>;w.material.uniforms.sunDirection.value.copy(a.sunPosition).normalize();w.material.uniforms.sunColor.value.set(a.sunColor??0xfff3de);}}
     renderer.shadowMap.needsUpdate=true;
     resize();
   }
@@ -151,7 +173,7 @@ async function boot(){
     document.querySelectorAll<HTMLButtonElement>('.destination').forEach((button,i)=>{button.classList.toggle('selected',i===index);button.setAttribute('aria-pressed',String(i===index));});
     applyView();createMarkers();updateJournal();await renderer.compileAsync(world,camera);renderer.render(world,camera);$('#scene-fade').classList.remove('active');switching=false;
   }
-  function resize(){const w=innerWidth,h=innerHeight;renderer.setSize(w,h);camera.aspect=w/h;camera.fov=(landscapes[activeIndex].view?.fov??54)+(w<760?12:0);camera.clearViewOffset();camera.updateProjectionMatrix();$('.interaction-hint').textContent=w<760?'单指观察 · 双指缩放':'拖动观察 · 滚轮缩放';}
+  function resize(){const w=innerWidth,h=innerHeight;renderer.setSize(w,h);camera.aspect=w/h;camera.fov=(landscapes[activeIndex].view?.fov??54)+(w<760?12:0);camera.clearViewOffset();camera.updateProjectionMatrix();csm.updateFrustums();camera.updateMatrixWorld();csm.update();renderer.shadowMap.needsUpdate=true;$('.interaction-hint').textContent=w<760?'单指观察 · 双指缩放':'拖动观察 · 滚轮缩放';}
   window.addEventListener('resize',resize);
   $('#start').addEventListener('click',()=>exploring?showDialog('#journal'):startExploring());
   $('#help-done').addEventListener('click',()=>{$<HTMLDialogElement>('#help').close();startExploring();});
@@ -165,6 +187,7 @@ async function boot(){
   document.addEventListener('keydown',event=>{if(event.key==='Escape'&&clean){setClean(false);return;}const target=event.target as HTMLElement;if(document.querySelector('dialog[open]')||/INPUT|TEXTAREA|SELECT/.test(target.tagName)||target.isContentEditable||event.ctrlKey||event.altKey||event.metaKey)return;if(['1','2','3','4'].includes(event.key))void setScene(Number(event.key)-1);if(event.code==='Space'&&!/BUTTON|A/.test(target.tagName)){event.preventDefault();setDrift(!drifting);}});
   applyView();createMarkers();updateJournal();await renderer.compileAsync(world,camera);
   const clock=new THREE.Clock();
+  const shadowCameraPosition=new THREE.Vector3(Infinity,Infinity,Infinity),shadowCameraRotation=new THREE.Quaternion();
   let lastDraw=0;
   function frame(now=0){
     requestAnimationFrame(frame);if(document.hidden||switching){clock.getDelta();return;}
@@ -174,7 +197,12 @@ async function boot(){
     if(drifting&&!document.querySelector('dialog[open]'))camera.position.copy(baseOffset).applyAxisAngle(new THREE.Vector3(0,1,0),Math.sin(realElapsed*.085)*.13).add(controls.target);
     controls.update();
     const ground=landscapes[activeIndex].heightAt?.(camera.position.x,camera.position.z);
-    if(ground!==undefined&&camera.position.y<Math.max(ground+4,4)){camera.position.y=Math.max(ground+4,4);camera.lookAt(controls.target);}
+    const clearance=activeIndex===2?2.2:2.0;
+    if(ground!==undefined&&camera.position.y<Math.max(ground+clearance,clearance)){camera.position.y=Math.max(ground+clearance,clearance);camera.lookAt(controls.target);}
+    if(shadowCameraPosition.distanceToSquared(camera.position)>.01||shadowCameraRotation.angleTo(camera.quaternion)>.0001){
+      camera.updateMatrixWorld();csm.update();renderer.shadowMap.needsUpdate=true;
+      shadowCameraPosition.copy(camera.position);shadowCameraRotation.copy(camera.quaternion);
+    }
     renderer.render(world,camera);
     if(!exploring||clean)return;
     const checkOcclusion=realElapsed-lastProjection>.24;

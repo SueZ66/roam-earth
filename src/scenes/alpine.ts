@@ -1,410 +1,215 @@
 import {
-  BufferGeometry,
-  CanvasTexture,
-  CylinderGeometry,
-  Color,
-  DoubleSide,
-  Euler,
-  Group,
-  Float32BufferAttribute,
-  IcosahedronGeometry,
-  InstancedMesh,
-  Matrix4,
-  Mesh,
-  MeshStandardMaterial,
-  PlaneGeometry,
-  Quaternion,
-  SRGBColorSpace,
-  Vector3,
+  BufferGeometry, Color, DoubleSide, Euler, Float32BufferAttribute, Group,
+  IcosahedronGeometry, InstancedMesh, Matrix4, Mesh, MeshStandardMaterial,
+  PlaneGeometry, Quaternion, Uint32BufferAttribute, Vector3,
 } from 'three';
-import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
-import { createTerrain, createWater, fbm, noise2, seeded } from './nature';
+import { createWater, fbm, noise2, seeded } from './nature';
 import { detailMaterial, landscapeMaterial } from './surface';
+import { alpineElevation } from './alpine-dem';
 import type { Landscape } from './types';
+import { addScannedRocks } from './scanned-rocks';
 
-/** A continuous, metre-scale landscape inspired by the Matterhorn and its glacial lakes. */
+/** A photographic landscape study using public DEM relief, with an art-directed lake foreground.
+ * Real-world metres; DEM controls the massif. Summit crest and foreground are art-directed refinements.
+ * DEM provenance and caveats are in public/terrain/alpine-dem-source.json.
+ */
 export function createAlpine(): Landscape {
-  const group = new Group();
-  group.name = 'swiss-alps-landscape';
+  const group = new Group(); group.name = 'Matterhorn from Riffelsee · DEM landscape study';
   const random = seeded(7431);
   const smoothstep = (a: number, b: number, n: number) => {
-    const t = Math.min(1, Math.max(0, (n - a) / (b - a)));
-    return t * t * (3 - 2 * t);
+    const t = Math.min(1, Math.max(0, (n - a) / (b - a))); return t * t * (3 - 2 * t);
   };
-
-  // The summit is a set of unequal intersecting rock faces, with a narrow fore-arête.
-  // Angular drainage cuts converge towards the summit instead of making rounded noise mounds.
-  function peak(x: number, z: number, cx: number, cz: number, radius: number, height: number, angle: number) {
-    const dx = x - cx, dz = z - cz;
-    const rx = dx * Math.cos(angle) - dz * Math.sin(angle);
-    const rz = dx * Math.sin(angle) + dz * Math.cos(angle);
-    const distance = Math.max(Math.abs(rx) * 0.88 + Math.abs(rz) * 0.19, Math.abs(rz) * 1.10 + Math.abs(rx) * 0.24);
-    const envelope = Math.max(0, 1 - distance / radius);
-    const drainage = Math.pow(0.5 + 0.5 * Math.sin(Math.atan2(rx, rz) * 19 + fbm(x * .014, z * .014, 3) * 1.7), 7);
-    const relief = fbm(x * .026, z * .026, 4) * 22 - drainage * 24;
-    return Math.max(0, Math.pow(envelope, 1.35) * height + relief * smoothstep(0, .27, envelope));
-  }
-  function matterhorn(x: number, z: number) {
-    const dx = x + 88, dz = z + 489;
-    const u = dx * .953 - dz * .303;
-    const v = dx * .303 + dz * .953;
-    const face = Math.max(u / 173, -u / 139, v / 339, -v / 196, (u * .81 + v * .59) / 263);
-    const mask = Math.max(0, 1 - face);
-    const pyramid = 427 * mask;
-    const angular = Math.atan2(dx, dz);
-    const drainage = Math.pow(.5 + .5 * Math.sin(angular * 26 + noise2(x * .011, z * .011) * 2.0), 9);
-    const lowerFace = smoothstep(.05, .36, mask) * (1 - smoothstep(.85, 1, mask));
-    const strataCoordinate = (pyramid + x * .19 + z * .095) / 16;
-    const strata = (strataCoordinate - Math.floor(strataCoordinate) - .5) * 3.8;
-    const crags = fbm(x * .037, z * .037, 4) * 7;
-    const cutFace = pyramid + (strata + crags - drainage * 20) * lowerFace;
-    // A long, fractured Hörnli-like ridge runs down the face towards the lake.
-    const ridgeT = Math.max(0, Math.min(1, (z + 489) / 360));
-    const ridgeAxis = -88 + ridgeT * 74 + Math.sin(ridgeT * 5.8) * 8;
-    const ridgeWidth = 9 + ridgeT * 69;
-    const ridgeEnvelope = Math.max(0, 1 - Math.abs(x - ridgeAxis) / ridgeWidth);
-    const foreRidge = z > -489 && z < -129
-      ? 397 * Math.pow(1 - ridgeT, 1.12) * ridgeEnvelope - drainage * 9 * lowerFace
-      : 0;
-    return Math.max(0, cutFace, foreRidge);
-  }
-
+  const lakeAltitude = 2757;
+  const lakeCenterZ = -64;
+  const shoreOutline: Array<[number, number]> = [
+    [-28, 9], [-10, 13], [2, 6], [14, 10], [23, 1], [30, -8], [25, -20], [35, -29],
+    [46, -31], [48, -51], [39, -65], [43, -83], [36, -107], [19, -126], [3, -130],
+    [-13, -116], [-28, -123], [-40, -110], [-35, -95], [-48, -83], [-51, -61],
+    [-45, -42], [-49, -24], [-38, -12],
+  ];
   function lakeRadius(x: number, z: number) {
-    return Math.hypot((x + 14) / 173, (z - 36) / 218) + fbm(x * 0.014 + 43, z * 0.014, 3) * 0.11;
+    if (Math.hypot(x, z - lakeCenterZ) > 340) return 1 + Math.hypot(x, z - lakeCenterZ) / 45;
+    let distance = Infinity, inside = false;
+    for (let i = 0, j = shoreOutline.length - 1; i < shoreOutline.length; j = i++) {
+      const a = shoreOutline[j], b = shoreOutline[i], dx = b[0] - a[0], dz = b[1] - a[1];
+      const t = Math.max(0, Math.min(1, ((x - a[0]) * dx + (z - a[1]) * dz) / (dx * dx + dz * dz)));
+      distance = Math.min(distance, Math.hypot(x - a[0] - dx * t, z - a[1] - dz * t));
+      if ((a[1] > z) !== (b[1] > z) && x < (b[0] - a[0]) * (z - a[1]) / (b[1] - a[1]) + a[0]) inside = !inside;
+    }
+    return 1 + (inside ? -distance : distance) / 45 + noise2(x * .13 + 21, z * .13 - 7) * .007;
+  }
+  function mountainRelief(x: number, z: number, dem: number) {
+    const dx = x, dz = z + 8052, radius = Math.hypot(dx, dz);
+    const weight = (1 - smoothstep(390, 1000, radius)) * smoothstep(690, 1250, dem);
+    if (weight <= 0) return dem;
+    const u = dx * .981 - dz * .195, v = dx * .195 + dz * .981;
+    // The known 4,478 m summit and three unequal faces recover the sharp crest blurred by DEM sampling.
+    // Erosion is artistic relief at 10–50 m wavelengths, subordinate to the public-data massif.
+    const faces = Math.max(u * 2.52 + v * .26, -u * 1.88 + v * .18, v * 1.39 - u * .13, -v * 1.82 + u * .2);
+    const crest = 1721 - faces;
+    const faceFlow = u > 0 ? u + v * .27 : u - v * .42;
+    const channelNoise = noise2(faceFlow * .031 + 11, v * .006 + 3);
+    const grooves = Math.pow(Math.max(0, channelNoise + .24), 2) * 48;
+    const fractures = fbm(u * .071 + v * .014, v * .031, 3) * 8;
+    const erosion = (grooves + fractures) * smoothstep(36, 145, radius);
+    return dem * (1 - weight) + (crest - erosion) * weight;
   }
   function heightAt(x: number, z: number) {
-    const foothills = Math.max(0, fbm(x * 0.0026 + 8, z * 0.0026 + 18, 5)) * 80;
-    let height = 12 + foothills + fbm(x * 0.016, z * 0.016, 4) * 6;
-    height += Math.max(
-      matterhorn(x, z),
-      peak(x, z, -94, -486, 442, 245, 0.28),
-      peak(x, z, -540, -627, 515, 335, -0.3),
-      peak(x, z, 431, -541, 460, 307, 0.55),
-      peak(x, z, 45, -960, 485, 358, -0.58),
-      peak(x, z, -885, -345, 380, 245, 0.38),
-      peak(x, z, 802, -393, 437, 248, 0.15),
-    );
-    const basin = lakeRadius(x, z);
-    const shoreline = smoothstep(0.78, 1.14, basin);
-    const bed = -13 + Math.pow(Math.min(1, basin), 3) * 18 + noise2(x * 0.045, z * 0.045) * 0.7;
-    height = bed * (1 - shoreline) + height * shoreline;
-    // The overlook is broad enough to orbit a little without exposing a landscape edge.
-    height += Math.exp(-((x - 150) ** 2 / 27000 + (z - 325) ** 2 / 19000)) * 17;
-    return height;
+    const dem = mountainRelief(x, z, alpineElevation(x, z) - lakeAltitude);
+    const radius = lakeRadius(x, z), signedShoreDistance = (radius - 1) * 45;
+    const localWeight = 1 - smoothstep(55, 155, signedShoreDistance);
+    if (localWeight <= 0 || Math.hypot(x, z - lakeCenterZ) > 340) return dem;
+    // Each cove has its own gently rising bank rather than a uniform elliptical bowl.
+    const bankSlope = .086 + noise2(x * .027 + 9, z * .025) * .025;
+    const basin = signedShoreDistance < 0 ? -3.7 * (1 - Math.exp(signedShoreDistance * .09)) : signedShoreDistance * bankSlope;
+    const bankRelief = fbm(x * .10, z * .10, 3) * .56 * smoothstep(1.5, 9, signedShoreDistance);
+    const gravelRelief = noise2(x * .87, z * .87) * .12 * smoothstep(.7, 3.5, signedShoreDistance);
+    const lowMound = Math.exp(-((x + 27) ** 2 / 380 + (z + 8) ** 2 / 520)) * 1.35;
+    return dem * (1 - localWeight) + (basin + bankRelief + gravelRelief + lowMound) * localWeight;
   }
 
-  const rock = landscapeMaterial({ biome: 'alpine', tint: 0xeff2ef, scale: 22, normalStrength: 0.8 });
-  const terrain = createTerrain({
-    width: 2600,
-    depth: 2600,
-    centerZ: -310,
-    segments: 344,
-    height: heightAt,
-    material: rock,
-    color: (x, y, z, slope) => {
-      const bedding = .5 + .5 * Math.sin((y + x * .19 + z * .095) * .36);
-      const exposed = smoothstep(.28, .75, slope) * smoothstep(70, 160, y);
-      return new Color().setScalar(.95 - exposed * bedding * .04 + noise2(x * .01, z * .01) * .02);
-    },
+  const groundMaterial = landscapeMaterial({
+    biome: 'alpine', tint: 0xf0f1ed, scale: 24, normalStrength: .67,
+    snowLine: [430, 820], shoreline: 0, meadowLine: [80, 340],
   });
-  terrain.castShadow = true;
-  group.add(terrain);
-  // Match shoreline props to the rendered triangles, not just the analytical height field.
-  const terrainPositions = terrain.geometry.getAttribute('position');
-  function surfaceHeight(x: number, z: number) {
-    const gx = Math.max(0, Math.min(343.99999, (x + 1300) / 2600 * 344));
-    const gz = Math.max(0, Math.min(343.99999, (z + 1610) / 2600 * 344));
-    const ix = Math.floor(gx), iz = Math.floor(gz), u = gx - ix, v = gz - iz;
-    const a = iz * 345 + ix, b = a + 345;
-    return u + v <= 1
-      ? terrainPositions.getY(a) * (1 - u - v) + terrainPositions.getY(a + 1) * u + terrainPositions.getY(b) * v
-      : terrainPositions.getY(b + 1) * (u + v - 1) + terrainPositions.getY(b) * (1 - u) + terrainPositions.getY(a + 1) * (1 - v);
+  const groundColor = (x: number, y: number, z: number, slope: number) => {
+    const macro = fbm(x * .0008 + 15, z * .0008, 3);
+    const dryMeadow = (1 - smoothstep(70, 310, y)) * (1 - smoothstep(.25, .65, slope));
+    return new Color().setRGB(.94 + macro * .035, .94 - dryMeadow * .022 + macro * .025, .95 - dryMeadow * .065 + macro * .025);
+  };
+  // One nonuniform, continuous grid replaces overlapping LOD meshes completely.
+  // Every region shares boundary vertices/normals: no skirts, holes, depth fighting or grey seam strips.
+  function axis(ranges: Array<[number, number, number]>) {
+    const values: number[] = [];
+    for (const [from, to, segments] of ranges) for (let i = 0; i < segments; i++) values.push(from + (to - from) * i / segments);
+    values.push(ranges[ranges.length - 1][1]); return values;
   }
-
-  const lake = createWater({
-    size: 880,
-    height: 7,
-    color: 0x367d84,
-    amplitude: 0.07,
-    distortion: 1.3,
-    sunDirection: new Vector3(-0.48, 0.78, 0.5).normalize(),
-  });
-  lake.position.x = -14;
-  lake.position.z = 35;
-  group.add(lake);
-
-  // Trace the true water contour, then feather a wet gravel ribbon into the dry shore.
-  function waterEdge(angle: number) {
-    let lo = .20, hi = 1.7;
-    for (let step = 0; step < 17; step++) {
-      const r = (lo + hi) * .5;
-      const x = -14 + Math.cos(angle) * 173 * r, z = 36 + Math.sin(angle) * 218 * r;
-      if (surfaceHeight(x, z) < 7.02) lo = r; else hi = r;
-    }
-    return (lo + hi) * .5;
-  }
-  const shoreVertices: number[] = [], shoreColors: number[] = [], shoreUvs: number[] = [], shoreIndices: number[] = [];
-  const shoreSegments = 280, shoreRings = 5;
-  for (let segment = 0; segment <= shoreSegments; segment++) {
-    const a = segment / shoreSegments * Math.PI * 2, edge = waterEdge(a);
-    const width = 3.6 + noise2(Math.cos(a) * 6, Math.sin(a) * 6) * 1.4;
-    for (let ring = 0; ring < shoreRings; ring++) {
-      const t = ring / (shoreRings - 1), radius = edge + (-1.1 + t * width) / 190;
-      const x = -14 + Math.cos(a) * 173 * radius, z = 36 + Math.sin(a) * 218 * radius;
-      const y = surfaceHeight(x, z);
-      shoreVertices.push(x, y + .065, z); shoreUvs.push(x / 4, z / 4);
-      const damp = 1 - smoothstep(7, 10.5, y);
-      const shade = .90 - damp * .24 + noise2(x * .38, z * .38) * .035;
-      shoreColors.push(shade * .93, shade, shade * .97);
-      if (segment < shoreSegments && ring < shoreRings - 1) {
-        const p = segment * shoreRings + ring, q = p + shoreRings;
-        shoreIndices.push(p, q, p + 1, q, q + 1, p + 1);
-      }
+  const xs = axis([[-6000,-1100,64],[-1100,-340,48],[-340,-90,64],[-90,90,240],[90,340,64],[340,1100,48],[1100,6000,64]]);
+  const zs = axis([[-11500,-9400,32],[-9400,-7000,240],[-7000,-500,160],[-500,-180,60],[-180,100,240],[100,230,28],[230,2000,32]]);
+  const vertices = new Float32Array(xs.length * zs.length * 3), uvs = new Float32Array(xs.length * zs.length * 2);
+  const indices = new Uint32Array((xs.length - 1) * (zs.length - 1) * 6);
+  let cell = 0;
+  for (let iz = 0; iz < zs.length; iz++) for (let ix = 0; ix < xs.length; ix++) {
+    const index = iz * xs.length + ix, x = xs[ix], z = zs[iz];
+    vertices[index*3] = x; vertices[index*3+1] = heightAt(x,z); vertices[index*3+2] = z;
+    uvs[index*2] = x/28; uvs[index*2+1] = z/28;
+    if (ix < xs.length-1 && iz < zs.length-1) {
+      const a = index, b = index + xs.length;
+      indices.set([a,b,a+1,b,b+1,a+1],cell); cell += 6;
     }
   }
-  const shoreGeometry = new BufferGeometry();
-  shoreGeometry.setAttribute('position', new Float32BufferAttribute(shoreVertices, 3));
-  shoreGeometry.setAttribute('color', new Float32BufferAttribute(shoreColors, 3));
-  shoreGeometry.setAttribute('uv', new Float32BufferAttribute(shoreUvs, 2));
-  shoreGeometry.setIndex(shoreIndices); shoreGeometry.computeVertexNormals();
-  const wetGravel = detailMaterial('rock', 0xbcc7c0, 2.3);
-  wetGravel.roughness = .54;
-  const wetShore = new Mesh(shoreGeometry, wetGravel);
-  wetShore.receiveShadow = true; wetShore.userData.noOcclusion = true; group.add(wetShore);
+  const geometry = new BufferGeometry(); geometry.setAttribute('position',new Float32BufferAttribute(vertices,3));
+  geometry.setAttribute('uv',new Float32BufferAttribute(uvs,2)); geometry.setIndex(new Uint32BufferAttribute(indices,1)); geometry.computeVertexNormals();
+  const normals = geometry.getAttribute('normal'), colors = new Float32Array(vertices.length);
+  for (let i=0;i<normals.count;i++) {
+    const c=groundColor(vertices[i*3],vertices[i*3+1],vertices[i*3+2],1-Math.max(0,normals.getY(i)));
+    colors.set([c.r,c.g,c.b],i*3);
+  }
+  geometry.setAttribute('color',new Float32BufferAttribute(colors,3)); geometry.computeBoundingSphere();
+  const terrain = new Mesh(geometry,groundMaterial); terrain.name = 'Continuous DEM and crest refinement · seamless adaptive grid';
+  terrain.castShadow = terrain.receiveShadow = true; group.add(terrain);
 
+  // A bounded lake mesh prevents the reflective water plane leaking into lower DEM valleys.
+  const lake = createWater({ size: 230, height: 0, color: 0x274c50, amplitude: .015, distortion: .35,
+    bathymetry: { height: heightAt, bounds: [-85, -180, 85, 55] }, bottomColor: 0x7d8371,
+    sunDirection: new Vector3(-.5, .78, .4).normalize() });
+  lake.position.z = lakeCenterZ; lake.material.uniforms.size.value = 1.0;
+  const waterGeometry = new PlaneGeometry(170, 230, 128, 160);
+  const waterPositions = waterGeometry.getAttribute('position'), waterIndex = waterGeometry.getIndex()!;
+  const wetTriangles: number[] = [];
+  for (let i = 0; i < waterIndex.count; i += 3) {
+    const a = waterIndex.getX(i), b = waterIndex.getX(i + 1), c = waterIndex.getX(i + 2);
+    const x = (waterPositions.getX(a) + waterPositions.getX(b) + waterPositions.getX(c)) / 3;
+    const z = lakeCenterZ - (waterPositions.getY(a) + waterPositions.getY(b) + waterPositions.getY(c)) / 3;
+    if (lakeRadius(x, z) < 1.06) wetTriangles.push(a, b, c);
+  }
+  waterGeometry.setIndex(wetTriangles); lake.geometry.dispose(); lake.geometry = waterGeometry; group.add(lake);
 
-  // Individually drawn needles on crossed, alpha-tested cards create airy, uneven tree outlines.
-  // All trees of one variant are instanced in a single draw call.
-  function evergreenTexture(variant: number) {
-    const rand = seeded(10501 + variant * 831);
-    const canvas = document.createElement('canvas');
-    canvas.width = 256;
-    canvas.height = 512;
-    const ctx = canvas.getContext('2d')!;
-    ctx.lineCap = 'round';
-    ctx.strokeStyle = '#615b43';
-    ctx.lineWidth = 5;
-    ctx.beginPath(); ctx.moveTo(126, 505); ctx.lineTo(129, 20); ctx.stroke();
-    for (let level = 0; level < 33; level++) {
-      const y = 38 + level * 12.1;
-      const reach = (15 + level * 2.75) * (0.65 + rand() * 0.44);
-      for (const side of [-1, 1]) {
-        const length = reach * (0.69 + rand() * 0.4);
-        const rise = 8 + rand() * 14;
-        for (let twig = 0; twig < 26; twig++) {
-          const t = twig / 26;
-          const x = 128 + side * t * length;
-          const by = y + t * rise;
-          ctx.strokeStyle = ['#263e32', '#334c39', '#3e5840', '#52674a', '#263c31'][Math.floor(rand() * 5)];
-          ctx.lineWidth = 1.1 + rand() * 1.3;
-          for (let needle = 0; needle < 3; needle++) {
-            const needleLength = 6 + (1 - t) * 10 + rand() * 8;
-            ctx.beginPath();
-            ctx.moveTo(x + (rand() - 0.5) * 6, by + rand() * 5);
-            ctx.lineTo(x + side * (2 + rand() * 6), by - needleLength);
-            ctx.stroke();
-          }
-        }
-      }
+  // Irregular, flattened gneiss fragments: a few larger stones anchor the photograph, then graded scree.
+  const matrix = new Matrix4(), quaternion = new Quaternion(), position = new Vector3(), scale = new Vector3();
+  function rockGeometry(variant: number, detail: number) {
+    const geometry = new IcosahedronGeometry(1, detail); const vertices = geometry.getAttribute('position');
+    const colors: number[] = [];
+    for (let i = 0; i < vertices.count; i++) {
+      const x = vertices.getX(i), y = vertices.getY(i), z = vertices.getZ(i);
+      const fracture = 1 + fbm(x * 2.8 + variant * 8, z * 3.1 + y * 1.6, 4) * .32;
+      const layer = Math.sin(y * 10 + x * 1.7 + variant) * .018;
+      vertices.setXYZ(i, x * fracture * (1 + y * .09), Math.max(-.62, y * fracture + layer), z * fracture * .86);
+      const grain = .91 + noise2(x * 7 + variant, z * 7 + y) * .045; colors.push(grain, grain, grain * .985);
     }
-    const texture = new CanvasTexture(canvas);
-    texture.colorSpace = SRGBColorSpace;
-    texture.anisotropy = 4;
-    return texture;
+    geometry.computeVertexNormals(); geometry.setAttribute('color', new Float32BufferAttribute(colors, 3)); return geometry;
   }
+  const foregroundStones = [
+    [-14, 21, 1.65], [12, 15, 1.35], [-32, 16, 1.1], [33, -14, 2.6], [-45, -18, .9],
+    [27, -8, .46], [-23, 30, .62], [18, 28, .35], [43, -63, 1.15], [-40, -99, .72],
+    [16, -137, .85], [-18, -143, .70], [8, 21, .48], [-9, 19, .68], [39, 8, 1.5],
+  ];
+  addScannedRocks(group,foregroundStones.map(([x,z,size],i)=>({x,z,size:size*1.55,yaw:i*2.399})),heightAt);
+  const scree = new InstancedMesh(rockGeometry(5, 1), detailMaterial('rock', 0xc7cec6, 2), 1500);
+  for (let i = 0; i < scree.count; i++) {
+    const segment = Math.floor(random() * shoreOutline.length), a = shoreOutline[segment], b = shoreOutline[(segment + 1) % shoreOutline.length];
+    const t = random(), spread = Math.pow(random(), 1.6) * 15;
+    const dx = b[0] - a[0], dz = b[1] - a[1], length = Math.hypot(dx, dz);
+    const x = a[0] + dx * t - dz / length * spread, z = a[1] + dz * t + dx / length * spread;
+    const size = .035 + Math.pow(random(), 2.4) * .40, y = heightAt(x, z);
+    position.set(x, y + size * .2, z); quaternion.setFromEuler(new Euler(random(), random() * 6.28, random() * .4));
+    matrix.compose(position, quaternion, new Vector3(size * (1.2 + random() * .8), size * .55, size)); scree.setMatrixAt(i, matrix);
+    const damp = 1 - smoothstep(0, 1.2, y), shade = .89 + random() * .14 - damp * .22;
+    scree.setColorAt(i, new Color().setRGB(shade, shade, shade * .98));
+  }
+  scree.receiveShadow = true; scree.castShadow = false; group.add(scree);
 
-  const treeCards = [0, Math.PI / 3, Math.PI * 2 / 3].map((angle) => {
-    const card = new PlaneGeometry(0.56, 1, 1, 1);
-    card.translate(0, 0.5, 0);
-    card.rotateY(angle);
-    return card;
-  });
-  const treeGeometry = mergeGeometries(treeCards)!;
-  treeCards.forEach((card) => card.dispose());
-  const foregroundTrees = [[142, 172, 13.5], [175, 116, 15], [203, 147, 11], [226, 58, 14], [-186, 75, 12], [-211, -3, 15.5], [193, -62, 13], [247, -113, 11.5], [277, 4, 14.5]];
-  const treePlacements: Array<{ x: number; z: number; y: number; size: number; angle: number }> = [];
-  for (let attempt = 0; attempt < 8000 && treePlacements.length < 1100; attempt++) {
-    const x = (random() - 0.5) * 1150;
-    const z = -360 + random() * 980;
-    const y = heightAt(x, z);
-    if (foregroundTrees.some(([tx, tz]) => Math.hypot(x - tx, z - tz) < 12)) continue;
-    const gradient = Math.hypot(heightAt(x + 1, z) - y, heightAt(x, z + 1) - y);
-    if (y < 10.5 || y > 118 || gradient > 1.05 || lakeRadius(x, z) < 1.035) continue;
-    const grove = .5 + fbm(x * .016 + 51, z * .016 - 7, 3) * .75;
-    const density = smoothstep(.18, .66, grove) * (1 - smoothstep(48, 116, y));
-    if (random() > density) continue;
-    if (x > -60 && x < 135 && z > 140 && z < 310) continue;
-    const treeHeight = (5 + random() * 12) * (1 - smoothstep(55, 120, y) * .5);
-    treePlacements.push({ x, z, y, size: treeHeight, angle: random() * Math.PI });
+  // At 2,757 m the lake lies above the tree line: low sedges and ochre alpine turf replace the fake forest.
+  const bladeVertices: number[] = [], bladeColors: number[] = [];
+  for (let blade = 0; blade < 6; blade++) {
+    const angle = blade / 6 * Math.PI * 2 + random() * .5, h = .11 + random() * .18;
+    const x = Math.cos(angle) * .05, z = Math.sin(angle) * .05, dx = Math.cos(angle + 1.57) * .008, dz = Math.sin(angle + 1.57) * .008;
+    bladeVertices.push(x - dx, 0, z - dz, x + dx, 0, z + dz, x + dx * .7, h * .55, z + dz * .7,
+      x - dx, 0, z - dz, x + dx * .7, h * .55, z + dz * .7, x + Math.cos(angle) * .047, h, z + Math.sin(angle) * .047);
+    const tone = new Color(['#797c48', '#91905a', '#677346', '#a29a6c', '#727544'][blade % 5]);
+    for (let vertex = 0; vertex < 6; vertex++) bladeColors.push(tone.r, tone.g, tone.b);
   }
-  const matrix = new Matrix4();
-  const quaternion = new Quaternion();
-  const position = new Vector3();
-  const scale = new Vector3();
-  for (let variant = 0; variant < 3; variant++) {
-    const instances = treePlacements.filter((_tree, i) => i % 3 === variant);
-    const treeMaterial = new MeshStandardMaterial({
-      map: evergreenTexture(variant), alphaTest: 0.45, side: DoubleSide,
-      roughness: 1, color: 0xd0d5c5,
-    });
-    const trees = new InstancedMesh(treeGeometry, treeMaterial, instances.length);
-    instances.forEach((tree, index) => {
-      position.set(tree.x, tree.y - 0.15, tree.z);
-      quaternion.setFromEuler(new Euler(0, tree.angle, 0));
-      scale.set(tree.size * (0.82 + random() * 0.30), tree.size, tree.size * (0.82 + random() * 0.3));
-      trees.setMatrixAt(index, matrix.compose(position, quaternion, scale));
-      trees.setColorAt(index, new Color().setScalar(0.78 + random() * 0.24));
-    });
-    trees.castShadow = true;
-    trees.receiveShadow = true;
-    trees.instanceMatrix.needsUpdate = true;
-    group.add(trees);
+  const sedgeGeometry = new BufferGeometry(); sedgeGeometry.setAttribute('position', new Float32BufferAttribute(bladeVertices, 3));
+  sedgeGeometry.setAttribute('color', new Float32BufferAttribute(bladeColors, 3)); sedgeGeometry.computeVertexNormals();
+  const sedgeMaterial = new MeshStandardMaterial({ vertexColors: true, roughness: 1, side: DoubleSide, color: 0xe5e6d8 });
+  const wind = { value: 0 };
+  sedgeMaterial.onBeforeCompile = shader => {
+    shader.uniforms.alpineWind = wind;
+    shader.vertexShader = 'uniform float alpineWind;\n' + shader.vertexShader;
+    shader.vertexShader = shader.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\ntransformed.x += sin(alpineWind*1.4+instanceMatrix[3].x*.32+instanceMatrix[3].z*.17)*position.y*position.y*.20;');
+  };
+  const sedges = new InstancedMesh(sedgeGeometry, sedgeMaterial, 7500); let sedgeCount = 0;
+  for (let attempt = 0; attempt < 55000 && sedgeCount < 7500; attempt++) {
+    const foreground = random() < .72;
+    const x = (random() - .5) * (foreground ? 112 : 220), z = foreground ? -16 + random() * 70 : -190 + random() * 300, y = heightAt(x, z);
+    if (lakeRadius(x, z) < 1.07 || y < .35 || y > 40 || fbm(x * .046, z * .046, 3) < -.15) continue;
+    const slope = Math.hypot(heightAt(x + .25, z) - y, heightAt(x, z + .25) - y) * 4;
+    if (slope > 1.2) continue;
+    const s = .55 + random() * 1.4;
+    matrix.compose(new Vector3(x, y - .018, z), new Quaternion().setFromAxisAngle(new Vector3(0, 1, 0), random() * 6.28), new Vector3(s, s, s));
+    sedges.setMatrixAt(sedgeCount++, matrix);
   }
+  sedges.count = sedgeCount; sedges.receiveShadow = true; sedges.castShadow = false; group.add(sedges);
 
-
-  // Nearby trees have real tapered trunks and 45 drooping branches, with small crossed needle sprays.
-  // The detailed prototype is instanced only nine times; distant woods use the lighter cards above.
-  const woodPieces: BufferGeometry[] = [], foliagePieces: BufferGeometry[] = [];
-  const up = new Vector3(0, 1, 0);
-  const trunkGeometry = new CylinderGeometry(.045, .25, 10.4, 8, 6);
-  trunkGeometry.translate(0, 5.2, 0);
-  const trunkPositions = trunkGeometry.getAttribute('position');
-  for (let i = 0; i < trunkPositions.count; i++) {
-    const y = trunkPositions.getY(i);
-    trunkPositions.setX(i, trunkPositions.getX(i) + Math.pow(y / 10.4, 2) * .23);
-  }
-  trunkGeometry.computeVertexNormals(); woodPieces.push(trunkGeometry);
-  const needleCanvas = document.createElement('canvas'); needleCanvas.width = 256; needleCanvas.height = 128;
-  const needleContext = needleCanvas.getContext('2d')!; const needleRandom = seeded(24731);
-  needleContext.lineCap = 'round';
-  for (let shoot = 0; shoot < 7; shoot++) {
-    const by = 38 + shoot * 8, bend = (shoot - 3) * 6;
-    for (let n = 0; n < 64; n++) {
-      const t = n / 64, x = 8 + t * 238, y = by + Math.sin(t * 2.8) * bend;
-      needleContext.strokeStyle = ['#37503a', '#506346', '#68764f', '#314932'][Math.floor(needleRandom() * 4)];
-      needleContext.lineWidth = .8 + needleRandom();
-      const length = 4 + (1 - t) * 10 + needleRandom() * 6;
-      needleContext.beginPath(); needleContext.moveTo(x, y); needleContext.lineTo(x + 4, y - length); needleContext.stroke();
-      needleContext.beginPath(); needleContext.moveTo(x, y); needleContext.lineTo(x + 3, y + length * .75); needleContext.stroke();
-    }
-  }
-  const needleTexture = new CanvasTexture(needleCanvas); needleTexture.colorSpace = SRGBColorSpace; needleTexture.anisotropy = 4;
-  const branchRand = seeded(8083);
-  for (let level = 0; level < 9; level++) {
-    const y = 1.8 + level * .88, reach = 2.45 * Math.pow(1 - level / 10, .8);
-    for (let arm = 0; arm < 5; arm++) {
-      const phi = arm / 5 * Math.PI * 2 + level * 2.41 + branchRand() * .35;
-      const length = reach * (.80 + branchRand() * .33);
-      const start = new Vector3(.15 * y / 10, y, 0);
-      const end = new Vector3(Math.cos(phi) * length, y - .37 + level * .025, Math.sin(phi) * length);
-      const vector = end.clone().sub(start);
-      const branch = new CylinderGeometry(.013, .046 * (1 - level / 12), vector.length(), 5, 1);
-      branch.applyMatrix4(new Matrix4().compose(start.clone().add(end).multiplyScalar(.5), new Quaternion().setFromUnitVectors(up, vector.clone().normalize()), new Vector3(1, 1, 1)));
-      woodPieces.push(branch);
-      for (let spray = 0; spray < 4; spray++) {
-        const t = .20 + spray * .25, center = start.clone().lerp(end, t);
-        const width = (.8 + length * .23) * (1 - t * .22), height = .46 + (1 - t) * .26;
-        for (const crossing of [0, Math.PI / 2]) {
-          const card = new PlaneGeometry(width, height);
-          const q = new Quaternion().setFromEuler(new Euler(.26 + branchRand() * .22, phi + crossing, (branchRand() - .5) * .4));
-          card.applyMatrix4(new Matrix4().compose(center, q, new Vector3(1, 1, 1))); foliagePieces.push(card);
-        }
-      }
-    }
-  }
-  const detailedWood = mergeGeometries(woodPieces)!, detailedFoliage = mergeGeometries(foliagePieces)!;
-  woodPieces.forEach(g => g.dispose()); foliagePieces.forEach(g => g.dispose());
-  const nearbyWood = new InstancedMesh(detailedWood, new MeshStandardMaterial({ color: 0x716756, roughness: .99 }), foregroundTrees.length);
-  const nearbyFoliage = new InstancedMesh(detailedFoliage, new MeshStandardMaterial({ map: needleTexture, color: 0xd9dfca, alphaTest: .38, side: DoubleSide, roughness: 1 }), foregroundTrees.length);
-  foregroundTrees.forEach(([x, z, size], i) => {
-    quaternion.setFromEuler(new Euler(0, i * 2.37, (random() - .5) * .035));
-    matrix.compose(new Vector3(x, heightAt(x, z) - .10, z), quaternion, new Vector3(size / 10.4, size / 10.4, size / 10.4));
-    nearbyWood.setMatrixAt(i, matrix); nearbyFoliage.setMatrixAt(i, matrix);
-    nearbyFoliage.setColorAt(i, new Color().setScalar(.88 + random() * .17));
-  });
-  nearbyWood.castShadow = nearbyFoliage.castShadow = true;
-  nearbyWood.receiveShadow = nearbyFoliage.receiveShadow = true;
-  group.add(nearbyWood, nearbyFoliage);
-
-  const stoneGeometry = new IcosahedronGeometry(1, 1);
-  const stonePositions = stoneGeometry.getAttribute('position');
-  for (let i = 0; i < stonePositions.count; i++) {
-    const x = stonePositions.getX(i), y = stonePositions.getY(i), z = stonePositions.getZ(i);
-    const deformation = 1 + noise2(x * 3 + z, y * 4) * 0.22;
-    stonePositions.setXYZ(i, x * deformation, y * deformation, z * deformation);
-  }
-  stoneGeometry.computeVertexNormals();
-  stoneGeometry.setAttribute('color', new Float32BufferAttribute(new Float32Array(stonePositions.count * 3).fill(1), 3));
-  const stoneMaterial = detailMaterial('rock', 0xd4d8cf, 3.1);
-  const stones = new InstancedMesh(stoneGeometry, stoneMaterial, 175);
-  let stoneIndex = 0;
-  for (let attempt = 0; attempt < 1300 && stoneIndex < 175; attempt++) {
-    const x = (random() - 0.5) * 710;
-    const z = -160 + random() * 550;
-    const y = heightAt(x, z);
-    if (y < 7.4 || y > 105) continue;
-    const size = 0.6 + Math.pow(random(), 2) * 5.8;
-    position.set(x, y - size * 0.27, z);
-    scale.set(size * (1 + random() * 0.4), size * (0.5 + random() * 0.55), size);
-    quaternion.setFromEuler(new Euler(random(), random() * 6.28, random() * 0.4));
-    stones.setMatrixAt(stoneIndex, matrix.compose(position, quaternion, scale));
-    stones.setColorAt(stoneIndex, new Color().setScalar(0.8 + random() * 0.3));
-    stoneIndex++;
-  }
-  stones.count = stoneIndex;
-  stones.castShadow = true;
-  stones.receiveShadow = true;
-  stones.instanceMatrix.needsUpdate = true;
-  group.add(stones);
-
-  const pebbleGeometry = new IcosahedronGeometry(1, 0);
-  const pebblePositions = pebbleGeometry.getAttribute('position');
-  for (let i = 0; i < pebblePositions.count; i++) {
-    const x = pebblePositions.getX(i), y = pebblePositions.getY(i), z = pebblePositions.getZ(i);
-    const k = .90 + noise2(x * 3 + y, z * 4) * .17; pebblePositions.setXYZ(i, x * k, y * k, z * k);
-  }
-  pebbleGeometry.computeVertexNormals();
-  pebbleGeometry.setAttribute('color', new Float32BufferAttribute(new Float32Array(pebblePositions.count * 3).fill(1), 3));
-  const gravel = new InstancedMesh(pebbleGeometry, detailMaterial('rock', 0xd4dad2, 1.1), 1050);
-  for (let i = 0; i < gravel.count; i++) {
-    const a = random() * Math.PI * 2, edge = waterEdge(a), offset = -.3 + Math.pow(random(), 1.4) * 11;
-    const radius = edge + offset / 190, x = -14 + Math.cos(a) * 173 * radius, z = 36 + Math.sin(a) * 218 * radius;
-    const y = surfaceHeight(x, z), size = .12 + Math.pow(random(), 2.1) * .74;
-    position.set(x, y + size * .18, z); quaternion.setFromEuler(new Euler(random() * .4, random() * 6.28, random() * .3));
-    matrix.compose(position, quaternion, new Vector3(size * (1 + random() * .6), size * .46, size)); gravel.setMatrixAt(i, matrix);
-    const damp = 1 - smoothstep(7, 10, y); gravel.setColorAt(i, new Color().setScalar(.92 - damp * .23 + random() * .1));
-  }
-  gravel.castShadow = false; gravel.receiveShadow = true; group.add(gravel);
-
-
+  const cameraY = heightAt(0, 27) + 2.2;
   return {
-    heightAt,
-    group,
+    group, heightAt,
     collectibles: [
-      { position: new Vector3(-35, 17, -100), name: '冰川湖畔', message: '细碎的岩粉悬浮在融水中，留下阿尔卑斯湖泊特有的青绿色。' },
-      { position: new Vector3(-60, heightAt(-60, -320) + 22, -320), name: '马特洪峰', message: '以瑞士马特洪峰为灵感：冰川侵蚀塑造了锐利的山脊与不对称岩壁。' },
-      { position: new Vector3(60, heightAt(60, -220) + 20, -220), name: '林线之间', message: '针叶林沿山坡生长；越过林线，只剩岩石、积雪与风。' },
+      { position: new Vector3(-8, 2.8, -94), name: '湖面倒影', message: '利菲尔湖位于海拔约2757米的高山地带，平静水面映出远处山体。近岸为艺术化重建。' },
+      { position: new Vector3(-160, heightAt(-160, -8020) + 100, -8020), name: '马特洪峰', message: '远山轮廓参考公开高程数据，保留主峰与相连山脊的真实尺度关系；并非精确扫描。' },
+      { position: new Vector3(13, heightAt(13, -150) + 3.8, -150), name: '高山草甸', message: '这里已经越过林线。低矮莎草、碎石与裸岩，适应着短暂的高山夏季。' },
     ],
     view: {
-      position: new Vector3(103, 43, 244),
-      target: new Vector3(-44, 126, -379),
-      fov: 51,
-      minDistance: 480,
-      maxDistance: 850,
-      azimuthRange: 0.43,
-      polarRange: 0.10,
+      position: new Vector3(0, cameraY, 27), target: new Vector3(0, cameraY + 3, -110),
+      fov: 40, minDistance: 117, maxDistance: 175, azimuthRange: .24, polarRange: .035,
     },
     atmosphere: {
-      fogColor: 0xb6c8cf,
-      fogDensity: 0.00048,
-      sunPosition: new Vector3(-470, 790, 420),
-      sunColor: 0xfff1d8,
-      sunIntensity: 3.0,
-      exposure: 0.95,
-      skyRotation: 0.7,
+      fogColor: 0xbdcbd2, fogDensity: .000027,
+      sunPosition: new Vector3(-520, 760, 380), sunColor: 0xfff3e2,
+      sunIntensity: 2.65, exposure: 1.0, skyRotation: .9,
     },
     update(elapsed: number) {
-      lake.material.uniforms.time.value = elapsed * 0.46;
+      lake.material.uniforms.time.value = elapsed * .23; wind.value = elapsed;
     },
   };
 }

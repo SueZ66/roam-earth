@@ -4,12 +4,15 @@ import {
   PlaneGeometry, Quaternion, Vector3,
 } from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
-import { createTerrain, createWater, fbm, seeded, terrainMaterial } from './nature';
+import { createWater, fbm, seeded, terrainMaterial } from './nature';
 import { detailMaterial, landscapeMaterial } from './surface';
+import { faroeHeight } from './faroe-elevation';
+import { focusedTerrain } from './photographic-terrain';
+import { addScannedRocks } from './scanned-rocks';
 import type { Landscape } from './types';
 
-/** A landscape study inspired by the long, treeless valleys of the Faroe Islands.
- * The geography is procedural, rather than a claim to reproduce survey data. */
+/** Actual Vágar elevation anchors the geography. Vegetation, cottage and small
+ * surface relief are authored scenery, not a surveyed reconstruction. */
 export function createMeadow(): Landscape {
   const group = new Group();
   group.name = 'Faroe Islands — Atlantic grasslands';
@@ -19,33 +22,17 @@ export function createMeadow(): Landscape {
     const t = Math.max(0, Math.min(1, (value - a) / (b - a)));
     return t * t * (3 - 2 * t);
   };
-  const cottageX = -79;
-  const cottageZ = -94;
+  const cottageX = 24;
+  const cottageZ = 70;
   const rawHeight = (x: number, z: number) => {
-    // Wide glacial floor, with an open north-facing inlet beyond the pass.
-    const floor = 8 + (z + 500) * 0.044;
-    const leftSpine = -442 + 74 * Math.sin((z + 90) * 0.0034);
-    const rightSpine = 475 + 77 * Math.sin(z * 0.0027);
-    const leftMass = 390 * gaussian(x - leftSpine, 235)
-      * (0.47 + 0.53 * gaussian(z + 370, 590));
-    const rightMass = 457 * gaussian(x - rightSpine, 259)
-      * (0.31 + 0.69 * gaussian(z + 790, 575));
-    const farHeadland = 302 * gaussian(x + 656, 450) * gaussian(z + 1300, 415);
-    const mass = leftMass + rightMass + farHeadland;
-    const crag = fbm(x * 0.008, z * 0.008, 5) * (4 + mass * 0.075);
-    // Runoff cuts irregular channels across the long volcanic fells. A second,
-    // slower field breaks up the ridgeline instead of repeating identical ribs.
-    const highSlope = smooth(75, 230, mass);
-    const drainage = fbm(z * 0.018 + 61, x * 0.003 + z * 0.0016, 4);
-    const tributaries = fbm(z * 0.031 - 37, x * 0.0045, 3);
-    const grooves = Math.pow(smooth(-0.31, 0.48, drainage + tributaries * 0.23), 3)
-      * mass * 0.105 * highSlope;
-    const crestBreaks = fbm(z * 0.0067 + 13, x * 0.0022, 4) * mass * 0.058 * highSlope;
-    const strata = Math.sin((floor + mass) * 0.068 + fbm(x * 0.005, z * 0.005, 3) * 1.25)
-      * (1.4 + highSlope * 1.5) * highSlope;
-    const foreground = 9 * gaussian(x - 85, 210) * gaussian(z - 185, 220)
-      + 10 * gaussian(x + 165, 145) * gaussian(z - 115, 180);
-    return floor + mass + crag - grooves + crestBreaks + strata + foreground;
+    const elevation = faroeHeight(x, z);
+    if (elevation < 0.6) return -6;
+    const land = smooth(0.6, 6, elevation);
+    // Metre-scale tussocks and erosion remain subordinate to real valley walls,
+    // saddles and cliff silhouettes rather than inventing new rounded peaks.
+    const turf = fbm(x * 0.058, z * 0.058, 4) * 0.58;
+    const crags = fbm(x * 0.021 + 17, z * 0.021, 4) * smooth(170, 480, elevation) * 3.8;
+    return -6 * (1 - land) + (elevation + turf + crags) * land;
   };
   const cottageY = rawHeight(cottageX, cottageZ);
   const height = (x: number, z: number) => {
@@ -53,12 +40,13 @@ export function createMeadow(): Landscape {
     return rawHeight(x, z) * (1 - flatten) + cottageY * flatten;
   };
   const footpathX = (z: number) => 17 + 34 * Math.sin((z + 74) * 0.009)
-    - 61 * gaussian(z + 92, 135);
+    - 16 * gaussian(z - 70, 120);
 
-  const groundMaterial = landscapeMaterial({ biome: 'meadow', tint: 0xf2f5e9, scale: 24, normalStrength: 0.82 });
-  const basaltMaterial = detailMaterial('rock', 0x8d9388, 2.8);
-  const ground = createTerrain({
-    width: 2520, depth: 2600, segments: 272, centerZ: -465,
+  const groundMaterial = landscapeMaterial({ biome: 'meadow', tint: 0xf4f6ee, scale: 32, normalStrength: 0.9 });
+  const basaltMaterial = detailMaterial('rock', 0x8c9487, 2.0);
+  const terrain = focusedTerrain({
+    minX: -3850, maxX: 2450, minZ: -3900, maxZ: 2450,
+    focusX: 42, focusZ: 140, segments: 448, concentration: 0.15,
     height, material: groundMaterial,
     color: (x, y, z, slope) => {
       const moisture = fbm(x * 0.017 + 26, z * 0.017 - 12, 4) * 0.055;
@@ -71,29 +59,15 @@ export function createMeadow(): Landscape {
       );
     },
   });
-  // The shared surface material resolves rock strata, turf and wet ground in
-  // world space; geometry supplies the actual eroded silhouette and drainage.
-  const groundPositions = ground.geometry.getAttribute('position');
+  const ground = terrain.mesh;
+  ground.castShadow = true;
   group.add(ground);
-  // Sample the actual rendered triangles so the narrow trail and tiny blades
-  // cannot float above or disappear below the coarser distant-landscape mesh.
-  const surfaceHeight = (x: number, z: number) => {
-    const gx = (x + 1260) / 2520 * 272;
-    const gz = (z + 1765) / 2600 * 272;
-    const ix = Math.max(0, Math.min(271, Math.floor(gx)));
-    const iz = Math.max(0, Math.min(271, Math.floor(gz)));
-    const u = gx - ix, v = gz - iz;
-    const a = iz * 273 + ix;
-    const ha = groundPositions.getY(a), hb = groundPositions.getY(a + 273);
-    const hd = groundPositions.getY(a + 1), hc = groundPositions.getY(a + 274);
-    return u + v <= 1 ? ha * (1 - u - v) + hd * u + hb * v
-      : hc * (u + v - 1) + hb * (1 - u) + hd * (1 - v);
-  };
+  const surfaceHeight = terrain.sample;
 
-  const sea = createWater({ size: 5200, height: -0.7, color: 0x28424b, amplitude: 0.2, distortion: 1.15,
+  const sea = createWater({ size: 12000, height: 0.15, color: 0x28424b, amplitude: 0.2, distortion: 1.15,
     sunDirection: new Vector3(-0.55, 0.64, 0.23) });
   sea.geometry.dispose();
-  sea.geometry = new PlaneGeometry(5200, 5200, 48, 48);
+  sea.geometry = new PlaneGeometry(12000, 12000, 48, 48);
   group.add(sea);
 
   // A worn walking trail follows the contours, becoming fine and intermittent
@@ -105,8 +79,8 @@ export function createMeadow(): Landscape {
   for (let n = 0; n < pathSteps; n++) {
     const z0 = 305 - n / pathSteps * 900;
     const z1 = 305 - (n + 1) / pathSteps * 900;
-    const half0 = 0.73 + 0.16 * Math.sin(z0 * 0.05);
-    const half1 = 0.73 + 0.16 * Math.sin(z1 * 0.05);
+    const half0 = 0.48 + 0.11 * Math.sin(z0 * 0.05);
+    const half1 = 0.48 + 0.11 * Math.sin(z1 * 0.05);
     const verts = [
       [footpathX(z0) - half0, z0], [footpathX(z1) - half1, z1], [footpathX(z0) + half0, z0],
       [footpathX(z0) + half0, z0], [footpathX(z1) - half1, z1], [footpathX(z1) + half1, z1],
@@ -128,37 +102,68 @@ export function createMeadow(): Landscape {
   group.add(trail);
 
   // Eroded boulders share one detailed geometry and a single instanced draw.
-  const boulderGeometry = new IcosahedronGeometry(1, 3);
+  const boulderGeometry = new IcosahedronGeometry(1, 5);
   const boulderPositions = boulderGeometry.getAttribute('position');
   for (let n = 0; n < boulderPositions.count; n++) {
     const x = boulderPositions.getX(n), y = boulderPositions.getY(n), z = boulderPositions.getZ(n);
-    const joint = Math.pow(Math.abs(Math.sin(y * 9.6 + z * 0.5)), 10) * 0.055;
-    const erosion = 1 + fbm(x * 3 + z, y * 3 - z, 3) * 0.25 - joint;
-    boulderPositions.setXYZ(n, x * erosion, y * erosion * 0.94, z * erosion);
+    const joint = Math.pow(Math.abs(Math.sin(y * 12.8 + z * 0.36)), 18) * 0.08;
+    const erosion = 1 + fbm(x * 4 + z, y * 4 - z, 4) * 0.27 - joint;
+    boulderPositions.setXYZ(n, Math.min(x * erosion, 0.84 - z * 0.21),
+      Math.min(y * erosion * 0.94, 0.80 + x * 0.14), z * erosion);
   }
   boulderGeometry.computeVertexNormals();
   boulderGeometry.setAttribute('color', new Float32BufferAttribute(new Float32Array(boulderPositions.count * 3).fill(1), 3));
-  const boulders = new InstancedMesh(boulderGeometry, basaltMaterial, 92);
+  const boulders = new InstancedMesh(boulderGeometry, basaltMaterial, 128);
+  // These are general-purpose Poly Haven photogrammetry assets, not scans
+  // captured in the Faroes. Four foreground pieces replace procedural rocks.
+  const scannedRocks = [
+    { x: 30, z: 112, size: 2.0, yaw: 0.6 },
+    { x: 48, z: 96, size: 1.65, yaw: 2.1 },
+    { x: 18, z: 72, size: 1.3, yaw: -0.8 },
+    { x: 58, z: 55, size: 1.8, yaw: 1.3 },
+  ];
+  const inScannedRock = (x: number, z: number) => scannedRocks.some(rock => Math.hypot(x - rock.x, z - rock.z) < rock.size * 0.58);
+  const proceduralRocks: { x: number; z: number; size: number; matrix: Matrix4; color: Color }[] = [];
   const matrix = new Matrix4();
   const quaternion = new Quaternion();
   const up = new Vector3(0, 1, 0);
   const position = new Vector3();
   const scale = new Vector3();
   for (let n = 0; n < boulders.count; n++) {
-    const x = n < 48 ? -200 + random() * 370 : (random() < 0.5 ? -1 : 1) * (140 + random() * 305);
-    const z = n < 48 ? 58 + random() * 193 : -820 + random() * 970;
-    const size = n < 48 ? 0.35 + random() ** 2 * 2.0 : 1.3 + random() ** 2 * 4.4;
+    const fan = n < 36 ? [91, 128, 24, 31] : n < 64 ? [-18, 15, 20, 33]
+      : [[-260, -650, 43, 105], [430, -650, 52, 122], [700, -1050, 55, 140]][n % 3];
+    const x = fan[0] + (random() - 0.5) * fan[2];
+    const z = fan[1] + (random() - 0.5) * fan[3];
+    const size = n < 64 ? 0.25 + random() ** 2 * 1.7 : 0.9 + random() ** 2 * 3.8;
     position.set(x, surfaceHeight(x, z) - size * 0.14, z);
     quaternion.setFromAxisAngle(up, random() * Math.PI * 2);
     scale.set(size * (0.9 + random()), size * (0.45 + random() * 0.45), size * (0.75 + random()));
     matrix.compose(position, quaternion, scale);
-    boulders.setMatrixAt(n, matrix);
     const lichen = random();
-    boulders.setColorAt(n, new Color().setRGB(0.73 + lichen * 0.19, 0.76 + lichen * 0.22, 0.71 + lichen * 0.14));
+    proceduralRocks.push({ x, z, size, matrix: matrix.clone(),
+      color: new Color().setRGB(0.73 + lichen * 0.19, 0.76 + lichen * 0.22, 0.71 + lichen * 0.14) });
   }
+  const replacedRocks = new Set<number>();
+  for (const scan of scannedRocks) {
+    let nearest = -1, nearestDistance = Infinity;
+    proceduralRocks.forEach((rock, i) => {
+      const distance = Math.hypot(rock.x - scan.x, rock.z - scan.z);
+      if (!replacedRocks.has(i) && distance < nearestDistance) { nearest = i; nearestDistance = distance; }
+    });
+    if (nearest >= 0) replacedRocks.add(nearest);
+  }
+  let boulderCount = 0;
+  proceduralRocks.forEach((rock, i) => {
+    if (replacedRocks.has(i) || scannedRocks.some(scan => Math.hypot(rock.x - scan.x, rock.z - scan.z) < scan.size * 0.65 + rock.size * 2.1)) return;
+    boulders.setMatrixAt(boulderCount, rock.matrix);
+    boulders.setColorAt(boulderCount, rock.color);
+    boulderCount++;
+  });
+  boulders.count = boulderCount;
   boulders.castShadow = true;
   boulders.receiveShadow = true;
   group.add(boulders);
+  addScannedRocks(group, scannedRocks, surfaceHeight);
 
   // Five irregular, curved blades form a tuft. Fine fescue, upright wetland
   // rushes and low broad-leaf rosettes grow in separate, irregular communities.
@@ -179,15 +184,18 @@ export function createMeadow(): Landscape {
       [dx * spread + dz * width, 0, dz * spread - dx * width],
       [dx * (spread + bend * 0.25) - dz * width * 0.55, h * 0.51, dz * (spread + bend * 0.25) + dx * width * 0.55],
       [dx * (spread + bend * 0.25) + dz * width * 0.55, h * 0.51, dz * (spread + bend * 0.25) - dx * width * 0.55],
+      [dx * (spread + bend * 0.62) - dz * width * 0.25, h * 0.79, dz * (spread + bend * 0.62) + dx * width * 0.25],
+      [dx * (spread + bend * 0.62) + dz * width * 0.25, h * 0.79, dz * (spread + bend * 0.62) - dx * width * 0.25],
       [dx * (spread + bend), h, dz * (spread + bend)],
     ];
     const base = blades.length / 3;
     for (let n = 0; n < vertices.length; n++) {
       blades.push(...vertices[n]);
-      const tip = n === 4 ? 1 : n > 1 ? 0.6 : 0;
+      const tip = n === 6 ? 1 : n > 3 ? 0.82 : n > 1 ? 0.46 : 0;
       bladeColors.push(0.17 + tip * 0.05, 0.27 + tip * 0.07, 0.095 + tip * 0.035);
     }
-    bladeIndices.push(base, base + 2, base + 1, base + 1, base + 2, base + 3, base + 2, base + 4, base + 3);
+    bladeIndices.push(base, base + 2, base + 1, base + 1, base + 2, base + 3,
+      base + 2, base + 4, base + 3, base + 3, base + 4, base + 5, base + 4, base + 6, base + 5);
   }
   const grassGeometry = new BufferGeometry();
   grassGeometry.setAttribute('position', new Float32BufferAttribute(blades, 3));
@@ -210,13 +218,26 @@ export function createMeadow(): Landscape {
     `);
   };
   grassMaterial.customProgramCacheKey = () => 'faroe-grass-wind-v1';
-  const grasses = new InstancedMesh(grassGeometry, grassMaterial, 2200);
+  const grassPatches = Array.from({ length: 112 }, (_, i) => {
+    const near = i < 82;
+    const x = near ? 56 + (random() - 0.5) * 124 : -100 + random() * 330;
+    const z = near ? 35 + random() * 122 : -150 + random() * 270;
+    return { x, z, width: 0.65 + random() ** 2 * 3.8, stretch: 0.65 + random() * 1.1,
+      moisture: fbm(x * 0.026 + 9, z * 0.026 - 24, 3) };
+  });
+  const withinPatch = (patch: typeof grassPatches[number]) => {
+    const angle = random() * Math.PI * 2;
+    const radius = Math.min(2.7, Math.sqrt(-2 * Math.log(Math.max(0.001, random())))) * patch.width * 0.46;
+    return [patch.x + Math.cos(angle) * radius * patch.stretch, patch.z + Math.sin(angle) * radius];
+  };
+  const grasses = new InstancedMesh(grassGeometry, grassMaterial, 6500);
   let tuft = 0;
   while (tuft < grasses.count) {
-    const near = tuft < 1780;
-    const x = near ? 65 + (random() - 0.5) * 185 : (random() - 0.5) * 380;
-    const z = near ? 65 + random() * 212 : -185 + random() * 350;
-    if (Math.abs(x - footpathX(z)) < 1.1 || Math.hypot(x - cottageX, z - cottageZ) < 10) continue;
+    const patch = grassPatches[Math.floor(random() * (tuft < 4800 ? 82 : grassPatches.length))];
+    const [x, z] = withinPatch(patch);
+    const community = fbm(x * 0.31 + 4, z * 0.31 - 18, 3);
+    if (Math.abs(x - footpathX(z)) < 0.75 || Math.hypot(x - cottageX, z - cottageZ) < 10
+      || surfaceHeight(x, z) < 7 || community < -0.47 || inScannedRock(x, z)) continue;
     const tuftScale = 0.67 + random() * 0.92;
     position.set(x, surfaceHeight(x, z) - 0.012, z);
     quaternion.setFromAxisAngle(up, random() * Math.PI * 2);
@@ -238,12 +259,14 @@ export function createMeadow(): Landscape {
         points.getZ(n) * (wet ? 0.46 : 1.72));
     }
     geometry.computeVertexNormals();
-    const plants = new InstancedMesh(geometry, grassMaterial, wet ? 450 : 650);
+    const plants = new InstancedMesh(geometry, grassMaterial, wet ? 1600 : 2200);
+    const suitable = grassPatches.filter(patch => wet ? patch.moisture > 0.02 : patch.moisture < 0.12);
+    const communities = suitable.length ? suitable : grassPatches;
     let n = 0;
     while (n < plants.count) {
-      const x = 68 + (random() - 0.5) * 230, z = 40 + random() * 235;
-      const patch = fbm(x * 0.026 + 9, z * 0.026 - 24, 3);
-      if ((wet && patch < 0.02) || (!wet && patch > 0.12) || Math.abs(x - footpathX(z)) < 1.15) continue;
+      const [x, z] = withinPatch(communities[Math.floor(random() * communities.length)]);
+      if (Math.abs(x - footpathX(z)) < 0.85
+        || surfaceHeight(x, z) < 7 || Math.hypot(x - cottageX, z - cottageZ) < 10 || inScannedRock(x, z)) continue;
       const size = 0.55 + random() * 0.8;
       matrix.compose(position.set(x, surfaceHeight(x, z) - 0.015, z),
         quaternion.setFromAxisAngle(up, random() * Math.PI * 2), scale.set(size, size, size));
@@ -254,6 +277,37 @@ export function createMeadow(): Landscape {
     plants.receiveShadow = true;
     group.add(plants);
   }
+
+  // Salt and wind leave low, collapsed straw in the exposed patches between
+  // fresh tussocks. Warm fibres stay sparse and below the live grass canopy.
+  const strawGeometry = grassGeometry.clone();
+  const strawPositions = strawGeometry.getAttribute('position');
+  const strawColors = strawGeometry.getAttribute('color');
+  for (let n = 0; n < strawPositions.count; n++) {
+    strawPositions.setXYZ(n, strawPositions.getX(n) * 1.45, strawPositions.getY(n) * 0.52, strawPositions.getZ(n) * 1.45);
+    strawColors.setXYZ(n, 0.41, 0.34, 0.21);
+  }
+  strawGeometry.computeVertexNormals();
+  const strawMaterial = new MeshStandardMaterial({ color: 0xa99c7d, roughness: 1, envMapIntensity: 0.2,
+    side: DoubleSide, vertexColors: true });
+  strawMaterial.onBeforeCompile = grassMaterial.onBeforeCompile;
+  strawMaterial.customProgramCacheKey = () => 'faroe-low-weathered-straw';
+  const straw = new InstancedMesh(strawGeometry, strawMaterial, 620);
+  const exposed = grassPatches.filter(patch => patch.moisture < -0.04);
+  const strawPatches = exposed.length ? exposed : grassPatches;
+  let strawIndex = 0;
+  while (strawIndex < straw.count) {
+    const [x, z] = withinPatch(strawPatches[Math.floor(random() * strawPatches.length)]);
+    if (surfaceHeight(x, z) < 7
+      || Math.abs(x - footpathX(z)) < 0.7 || Math.hypot(x - cottageX, z - cottageZ) < 10 || inScannedRock(x, z)) continue;
+    const size = 0.6 + random() * 0.65;
+    matrix.compose(position.set(x, surfaceHeight(x, z) - 0.01, z), quaternion.setFromAxisAngle(up, random() * 6.28), scale.set(size, size, size));
+    straw.setMatrixAt(strawIndex, matrix);
+    straw.setColorAt(strawIndex, new Color().setScalar(0.79 + random() * 0.22));
+    strawIndex++;
+  }
+  straw.receiveShadow = true;
+  group.add(straw);
 
   // Sparse sea-thrift-sized flowers: 4 cm heads on fine stems, never oversized
   // decorative daisies. Several heads and leaves remain one instanced object.
@@ -287,12 +341,13 @@ export function createMeadow(): Landscape {
   const flowerMaterial = new MeshStandardMaterial({ color: 0xffffff, roughness: 1, envMapIntensity: 0.2, side: DoubleSide, vertexColors: true });
   flowerMaterial.onBeforeCompile = grassMaterial.onBeforeCompile;
   flowerMaterial.customProgramCacheKey = () => 'faroe-small-flower-wind';
-  const flowers = new InstancedMesh(flowerGeometry, flowerMaterial, 135);
+  const flowers = new InstancedMesh(flowerGeometry, flowerMaterial, 240);
   for (let n = 0; n < flowers.count; n++) {
-    const patch = [[49, 206], [-8, 159], [115, 119]][n % 3];
-    const angle = random() * Math.PI * 2, radius = Math.sqrt(random()) * 16;
+    const patch = [[52, 134], [32, 110], [87, 86]][n % 3];
+    const angle = random() * Math.PI * 2, radius = Math.sqrt(random()) * 6;
     let x = patch[0] + Math.cos(angle) * radius, z = patch[1] + Math.sin(angle) * radius;
     if (Math.abs(x - footpathX(z)) < 1.2) x += 3.2;
+    if (inScannedRock(x, z)) x += 3.5;
     const size = 0.7 + random() * 0.75;
     matrix.compose(position.set(x, surfaceHeight(x, z), z), quaternion.setFromAxisAngle(up, random() * 6.28), scale.set(size, size, size));
     flowers.setMatrixAt(n, matrix);
@@ -428,7 +483,7 @@ export function createMeadow(): Landscape {
     }
     for (const geometry of geometries) geometry.dispose();
   }
-  const roofGrasses = new InstancedMesh(grassGeometry, grassMaterial, 160);
+  const roofGrasses = new InstancedMesh(grassGeometry, grassMaterial, 260);
   for (let n = 0; n < roofGrasses.count; n++) {
     const x = (random() - 0.5) * 9.1, z = (random() - 0.5) * 6.9;
     const y = 6.318 - Math.abs(x) * Math.tan(0.507);
@@ -441,25 +496,25 @@ export function createMeadow(): Landscape {
   cottage.add(roofGrasses);
   group.add(cottage);
 
-  const cameraX = 72;
-  const cameraZ = 233;
+  const cameraX = 40;
+  const cameraZ = 149;
   return {
     heightAt: height,
     group,
     collectibles: [
       { position: new Vector3(-30, height(-30, -150) + 16, -150), name: '草顶人家', message: '法罗群岛的草皮屋顶，让建筑也长成山坡的一部分。' },
       { position: new Vector3(footpathX(-265), height(footpathX(-265), -265) + 12, -265), name: '北纬六十二度', message: '从北大西洋吹来的风，沿着没有树木的山谷长驱而入。' },
-      { position: new Vector3(-179, height(-179, -455) + 16, -455), name: '玄武岩的年轮', message: '层层深色岩带，记录着这片火山群岛古老的地质时间。' },
+      { position: new Vector3(60, height(60, -850) + 18, -850), name: '玄武岩的年轮', message: '层层深色岩带，记录着这片火山群岛古老的地质时间。' },
     ],
     view: {
-      position: new Vector3(cameraX, height(cameraX, cameraZ) + 11.2, cameraZ),
-      target: new Vector3(-31, 113, -570), fov: 53,
-      minDistance: 475, maxDistance: 1040, azimuthRange: 0.49, polarRange: 0.20,
+      position: new Vector3(cameraX, height(cameraX, cameraZ) + 8.5, cameraZ),
+      target: new Vector3(-20, 255, -1150), fov: 53,
+      minDistance: 1000, maxDistance: 1580, azimuthRange: 0.35, polarRange: 0.10,
     },
     atmosphere: {
-      fogColor: 0xb9c4c4, fogDensity: 0.00054,
-      sunPosition: new Vector3(-620, 710, 255), sunColor: 0xfff4dc,
-      sunIntensity: 2.5, exposure: 0.94, skyRotation: 0.83,
+      fogColor: 0xbdc6c5, fogDensity: 0.00026,
+      sunPosition: new Vector3(-750, 510, 350), sunColor: 0xfff4e1,
+      sunIntensity: 2.8, exposure: 0.95, skyRotation: 0.83,
     },
     update: (elapsed: number) => {
       windUniform.value = elapsed;

@@ -1,0 +1,18 @@
+[
+  {
+    "file": "sky-4k.hdr",
+    "source": "https://dl.polyhaven.org/file/ph-assets/HDRIs/hdr/4k/kloofendal_48d_partly_cloudy_puresky_4k.hdr",
+    "md5": "816340c969d2e60d659051d13ac3c4dc",
+    "verified": true,
+    "license": "CC0-1.0",
+    "asset": "kloofendal_48d_partly_cloudy_puresky"
+  },
+  {
+    "file": "sky-mobile.hdr",
+    "source": "https://dl.polyhaven.org/file/ph-assets/HDRIs/hdr/1k/kloofendal_48d_partly_cloudy_puresky_1k.hdr",
+    "md5": "c69498687e876bf68d2a8b8a62234eb9",
+    "verified": true,
+    "license": "CC0-1.0",
+    "asset": "kloofendal_48d_partly_cloudy_puresky"
+  }
+]

@@ -1,357 +1,167 @@
-import {
-  BufferGeometry, Color, DoubleSide, Euler, Float32BufferAttribute, Group,
-  IcosahedronGeometry, InstancedMesh, Matrix4, Mesh, MeshStandardMaterial,
-  Quaternion, ShaderMaterial, Vector3,
-} from 'three';
-import { createTerrain, createWater, fbm, seeded } from './nature';
+import { BufferGeometry, Color, DoubleSide, Euler, Float32BufferAttribute, Group, IcosahedronGeometry, InstancedMesh, Matrix4, Mesh, Quaternion, ShaderMaterial, SphereGeometry, Vector3 } from 'three';
+import { createWater, fbm, seeded } from './nature';
 import { detailMaterial, landscapeMaterial } from './surface';
+import { coastDem, coastElevations, sampleCoastElevation } from './coast-dem';
 import type { Landscape } from './types';
+import { addScannedRocks } from './scanned-rocks';
 
-/** A continuous coastal landscape inspired by Haukland, Lofoten, Norway. */
+/** Real Haukland/Mannen DEM proportions. Norwegian terrain data © Kartverket (CC BY 4.0).
+ * Local metres: east +X, south +Z. No vertical exaggeration. Beach details/seabed are authored.
+ * Provenance and reproducible processing: public/terrain/coast-sources.json.
+ */
 export function createCoast(): Landscape {
-  const group = new Group();
-  group.name = '罗弗敦 · 豪克兰湾';
-  const random = seeded(6808);
-  const shoreX = (z: number) => -65 + 95 * Math.tanh((z + 80) / 300)
-    + 28 * Math.exp(-(((z + 400) / 180) ** 2)) + fbm(z * 0.009, 49, 3) * 5;
-  type RidgePoint = [number, number, number];
-  const mainRidge: RidgePoint[] = [
-    [-1510, -1580, 0], [-1140, -1280, 380], [-945, -1070, 460],
-    [-745, -880, 520], [-670, -725, 478], [-558, -647, 332],
-    [-452, -585, 380], [-371, -505, 398], [-315, -431, 257],
-    [-265, -315, 109], [-245, -176, 0],
-  ];
-  const backRidge: RidgePoint[] = [
-    [-950, -1690, 0], [-610, -1325, 375], [-435, -1150, 318],
-    [-315, -1025, 342], [-223, -900, 224], [-191, -723, 0],
-  ];
-  const shoulderRidge: RidgePoint[] = [
-    [-490, -650, 0], [-429, -527, 276], [-330, -405, 200],
-    [-211, -325, 70], [-185, -230, 0],
-  ];
-  const ridgeHeight = (x: number, z: number, nodes: RidgePoint[], seaWidth: number, landWidth: number) => {
-    let result = 0;
-    for (let i = 0; i < nodes.length - 1; i++) {
-      const a = nodes[i], b = nodes[i + 1];
-      const dx = b[0] - a[0], dz = b[1] - a[1];
-      const lengthSquared = dx * dx + dz * dz;
-      const t = Math.max(0, Math.min(1, ((x - a[0]) * dx + (z - a[1]) * dz) / lengthSquared));
-      const px = a[0] + dx * t, pz = a[1] + dz * t;
-      const cross = (x - px) * dz - (z - pz) * dx;
-      const width = cross >= 0 ? seaWidth : landWidth;
-      const distance = Math.hypot(x - px, z - pz) / width;
-      if (distance >= 1) continue;
-      const crown = a[2] + (b[2] - a[2]) * t;
-      // Uneven saddles interrupt the crest; seaward faces break more steeply.
-      const saddle = Math.sin(t * Math.PI) * (12 + Math.sin(i * 3.1) * 18);
-      const crossSection = Math.pow(1 - distance, cross >= 0 ? 0.82 : 1.58);
-      result = Math.max(result, Math.max(0, crown + saddle) * crossSection);
+  const group = new Group(); group.name = '罗弗敦 · 豪克兰湾';
+  const random = seeded(682001353), samples = coastElevations();
+  const { width, height: rows, step, minX, minZ } = coastDem;
+  const distance = new Float32Array(samples.length);
+  for (let i = 0; i < samples.length; i++) distance[i] = samples[i] > 8 ? 0 : 1e6;
+  const diagonal = step * Math.SQRT2;
+  for (let z = 0; z < rows; z++) for (let x = 0; x < width; x++) {
+    const i = z * width + x;
+    if (x) distance[i] = Math.min(distance[i], distance[i - 1] + step);
+    if (z) distance[i] = Math.min(distance[i], distance[i - width] + step);
+    if (x && z) distance[i] = Math.min(distance[i], distance[i - width - 1] + diagonal);
+    if (x < width - 1 && z) distance[i] = Math.min(distance[i], distance[i - width + 1] + diagonal);
+  }
+  for (let z = rows - 1; z >= 0; z--) for (let x = width - 1; x >= 0; x--) {
+    const i = z * width + x;
+    if (x < width - 1) distance[i] = Math.min(distance[i], distance[i + 1] + step);
+    if (z < rows - 1) distance[i] = Math.min(distance[i], distance[i + width] + step);
+    if (x && z < rows - 1) distance[i] = Math.min(distance[i], distance[i + width - 1] + diagonal);
+    if (x < width - 1 && z < rows - 1) distance[i] = Math.min(distance[i], distance[i + width + 1] + diagonal);
+  }
+  const sampleDistance = (x: number, z: number) => {
+    const u = Math.max(0, Math.min(width - 1.001, (x - minX) / step)), v = Math.max(0, Math.min(rows - 1.001, (z - minZ) / step));
+    const ix = Math.floor(u), iz = Math.floor(v), fx = u - ix, fz = v - iz, i = iz * width + ix;
+    return (distance[i] * (1 - fx) + distance[i + 1] * fx) * (1 - fz) + (distance[i + width] * (1 - fx) + distance[i + width + 1] * fx) * fz;
+  };
+  const heightAt = (x: number, z: number) => {
+    const h = sampleCoastElevation(x, z);
+    const ocean = Math.max(0, 1 - h / 1.6) * Math.min(28, sampleDistance(x, z) * .095);
+    return h - .62 - ocean + fbm(x * .118, z * .134, 3) * Math.min(.85, Math.max(0, h - 12) * .014);
+  };
+  const patch = { minX: 0, maxX: 310, minZ: 400, maxZ: 750 };
+  const makeGround = (x0: number, z0: number, w: number, d: number, nx: number, nz: number, fine: boolean) => {
+    const positions = new Float32Array((nx + 1) * (nz + 1) * 3), colors = new Float32Array(positions.length), indices: number[] = [];
+    for (let z = 0; z <= nz; z++) for (let x = 0; x <= nx; x++) {
+      const wx = x0 + x / nx * w, wz = z0 + z / nz * d, i = z * (nx + 1) + x, h = heightAt(wx, wz);
+      const ripple = fine ? Math.sin(wx * 1.7 + wz * .59 + fbm(wx * .11, wz * .13, 2) * 2.4) * .016 * Math.min(1, Math.max(0, h - 1) / 4) : 0;
+      positions.set([wx, h + (fine ? .035 : 0) + ripple, wz], i * 3);
+      const tone = fine ? 1 - Math.exp(-((h - 1.35) ** 2) / .07) * .11 : .976 + fbm(wx * .009, wz * .009, 3) * .03;
+      colors.set([tone, tone, tone * .996], i * 3);
     }
-    return result;
+    for (let z = 0; z < nz; z++) for (let x = 0; x < nx; x++) {
+      const a = z * (nx + 1) + x, b = a + nx + 1, wx = x0 + x / nx * w, wz = z0 + z / nz * d;
+      if ([a, a + 1, b, b + 1].every(i => positions[i * 3 + 1] < -7)) continue;
+      if (!fine && wx > patch.minX + step && wx + step < patch.maxX - step && wz > patch.minZ + step && wz + step < patch.maxZ - step) continue;
+      indices.push(a, b, a + 1, a + 1, b, b + 1);
+    }
+    const geometry = new BufferGeometry();
+    geometry.setAttribute('position', new Float32BufferAttribute(positions, 3)); geometry.setAttribute('color', new Float32BufferAttribute(colors, 3));
+    geometry.setIndex(indices); geometry.computeVertexNormals(); geometry.computeBoundingSphere();
+    const material = landscapeMaterial({ biome: 'coast', scale: fine ? 16 : 25, normalStrength: fine ? .58 : .72 });
+    if (fine) { material.polygonOffset = true; material.polygonOffsetFactor = -1; material.polygonOffsetUnits = -1; }
+    const mesh = new Mesh(geometry, material); mesh.receiveShadow = true;
+    mesh.name = fine ? '近景潮间带 · 0.9米沙地' : 'Haukland / Mannen · 真实高程地貌'; group.add(mesh);
   };
-  const height = (x: number, z: number) => {
-    const inland = shoreX(z) - x;
-    if (inland < 0) return Math.max(-20, inland * 0.16);
-    const foothill = Math.max(0, inland - 90) * 0.055;
-    const warpedX = x + fbm(x * 0.005, z * 0.008, 3) * 21;
-    const warpedZ = z + fbm(x * 0.006 + 91, z * 0.008, 3) * 24;
-    const mountain = Math.max(
-      ridgeHeight(warpedX, warpedZ, mainRidge, 184, 405),
-      ridgeHeight(warpedX, warpedZ, backRidge, 155, 274),
-      ridgeHeight(warpedX, warpedZ, shoulderRidge, 122, 168),
-    );
-    const detail = fbm(x * 0.024, z * 0.033, 4) * Math.min(32, mountain * 0.21);
-    const drainage = Math.sin((z + x * 0.36 + fbm(x * 0.004, z * 0.011, 3) * 34) * 0.039);
-    const erosion = Math.exp(-Math.abs(drainage) * 7.3) * Math.min(26, mountain * 0.16);
-    const strata = Math.sin((mountain + z * 0.09) * 0.10) * Math.min(3.8, mountain * 0.024);
-    const land = Math.min(1, inland / 80);
-    return inland * 0.038 + foothill + Math.max(0, mountain + detail - erosion + strata) * land
-      + fbm(x * 0.052, z * 0.052, 3) * Math.min(1.1, inland * 0.012);
-  };
+  makeGround(minX, minZ, (width - 1) * step, (rows - 1) * step, width - 1, rows - 1, false);
+  makeGround(patch.minX, patch.minZ, patch.maxX - patch.minX, patch.maxZ - patch.minZ, 344, 328, true);
 
-  const terrainMat = landscapeMaterial({ biome: 'coast', scale: 23, normalStrength: 0.80 });
-  const mainland = createTerrain({
-    width: 2500, depth: 2600, centerX: -650, centerZ: -600,
-    segments: 280, height, material: terrainMat,
-    color: (x, y, z) => {
-      const n = fbm(x * 0.012, z * 0.012, 3);
-      return new Color().setRGB(0.96 + n * 0.035, 0.97 + n * 0.03, 0.945 + n * 0.035)
-        .multiplyScalar(y < 6 ? 1.07 : 1);
-    },
+  const water = createWater({ size: 5800, height: .12, color: 0x247779, amplitude: .24, distortion: 3.3,
+    sunDirection: new Vector3(-.7, .60, -.32).normalize(), bathymetry: { height: heightAt, bounds: [-1900, -450, 550, 1150] } });
+  const wp = water.geometry.getAttribute('position');
+  const concentrate = (p: number) => { const t = Math.abs(p) / 2900; return Math.sign(p) * (t <= .8 ? t * 1050 : 840 + ((t - .8) / .2) ** 1.4 * 2060); };
+  for (let i = 0; i < wp.count; i++) wp.setXY(i, concentrate(wp.getX(i)) - 650, concentrate(wp.getY(i)) - 220);
+  wp.needsUpdate = true; water.geometry.computeBoundingSphere(); group.add(water);
+
+  // Marching squares extracts the actual irregular shoreline, with a narrow seaward surf ribbon.
+  const fp: number[] = [], fu: number[] = [], fi: number[] = [], contour = .12;
+  // Use the final metre-valued surface (including seabed shaping), not raw DEM units.
+  const coastSurface = (group.children[0] as Mesh).geometry.getAttribute('position');
+  for (let z = 0; z < rows - 1; z++) for (let x = 0; x < width - 1; x++) {
+    const wx = minX + x * step, wz = minZ + z * step;
+    if (Math.hypot(wx + 550, wz - 180) > 2500) continue;
+    const i = z * width + x, values = [coastSurface.getY(i), coastSurface.getY(i + 1), coastSurface.getY(i + width + 1), coastSurface.getY(i + width)];
+    if (values.every(v => v <= contour) || values.every(v => v > contour)) continue;
+    const corners = [[wx, wz], [wx + step, wz], [wx + step, wz + step], [wx, wz + step]], points: Vector3[] = [];
+    for (let edge = 0; edge < 4; edge++) {
+      const next = (edge + 1) % 4; if ((values[edge] > contour) === (values[next] > contour)) continue;
+      const t = (contour - values[edge]) / (values[next] - values[edge]);
+      points.push(new Vector3(corners[edge][0] + (corners[next][0] - corners[edge][0]) * t, .33, corners[edge][1] + (corners[next][1] - corners[edge][1]) * t));
+    }
+    for (let j = 0; j + 1 < points.length; j += 2) {
+      const a = points[j], b = points[j + 1], c = a.clone().add(b).multiplyScalar(.5);
+      const normal = new Vector3(heightAt(c.x - 5, c.z) - heightAt(c.x + 5, c.z), 0, heightAt(c.x, c.z - 5) - heightAt(c.x, c.z + 5)).normalize();
+      const base = fp.length / 3;
+      for (let k = 0; k <= 4; k++) for (const p of [a, b]) { fp.push(p.x + normal.x * k * 3, .33, p.z + normal.z * k * 3); fu.push(k * 3, p.x * .57 + p.z * .83); }
+      for (let k = 0; k < 4; k++) { const v = base + k * 2; fi.push(v, v + 2, v + 1, v + 1, v + 2, v + 3); }
+    }
+  }
+  const foamGeometry = new BufferGeometry(); foamGeometry.setAttribute('position', new Float32BufferAttribute(fp, 3)); foamGeometry.setAttribute('uv', new Float32BufferAttribute(fu, 2)); foamGeometry.setIndex(fi);
+  const foamMaterial = new ShaderMaterial({ transparent: true, depthWrite: false, side: DoubleSide, uniforms: { time: { value: 0 } },
+    vertexShader: 'varying vec2 vSurf;varying vec2 vCoast;uniform float time;void main(){vSurf=uv;vCoast=position.xz;vec3 p=position;p.y+=sin(p.x*.053+p.z*.024+time*.73)*.06;gl_Position=projectionMatrix*modelViewMatrix*vec4(p,1.0);}',
+    fragmentShader: [
+      'varying vec2 vSurf;varying vec2 vCoast;uniform float time;',
+      'float hash(vec2 p){return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453);}',
+      'float noise(vec2 p){vec2 i=floor(p),f=fract(p);f=f*f*(3.-2.*f);return mix(mix(hash(i),hash(i+vec2(1,0)),f.x),mix(hash(i+vec2(0,1)),hash(i+1.),f.x),f.y);}',
+      'void main(){float x=vSurf.x;float coast=noise(vCoast*.016);float wave=pow(max(0.,sin(x*.76+time*.83+coast*3.6)),13.);',
+      'float lace=smoothstep(.22,.69,noise(vCoast*2.7+time*.033)+noise(vCoast*.72)*.26);float edge=smoothstep(0.,.8,x)*(1.-smoothstep(3.,12.,x));',
+      'float wash=exp(-x*.60)*(.5+.5*sin(time*.39+coast*5.));float alpha=(wave*.44+wash*.10)*edge*lace*(.25+coast*.65);gl_FragColor=vec4(.91,.94,.91,alpha);',
+      '#include <tonemapping_fragment>', '#include <colorspace_fragment>', '}',
+    ].join('\n'),
   });
-  mainland.name = '破碎岩脊与侵蚀沟谷';
-  group.add(mainland);
+  const foam = new Mesh(foamGeometry, foamMaterial); foam.name = '真实潮线 · 破碎浪沫'; foam.renderOrder = 2; foam.userData.noOcclusion = true; group.add(foam);
 
-  // Replace the low-resolution tidal strip with a locally detailed sand surface.
-  const mainPosition = mainland.geometry.getAttribute('position');
-  const mainIndex = mainland.geometry.index!;
-  const retainedTriangles: number[] = [];
-  const insideSandPatch = (index: number) => {
-    const z = mainPosition.getZ(index);
-    const inland = shoreX(z) - mainPosition.getX(index);
-    return z > -495 && z < 465 && inland > -7 && inland < 86;
+  // Weathered, physically sized granite. Only twelve foreground stones use the dense prototype.
+  const makeStone = (variant: number, fine: boolean) => {
+    const geo = fine ? new SphereGeometry(1, 40, 28) : new IcosahedronGeometry(1, 2), p = geo.getAttribute('position'), c = new Float32Array(p.count * 3);
+    for (let i = 0; i < p.count; i++) {
+      const x = p.getX(i), y = p.getY(i), z = p.getZ(i), r = 1 + fbm(x * 3.8 + variant * 13, z * 3.6 + y * 2.7, 5) * .19;
+      const split = Math.exp(-((y + x * .25 - z * .09 - .14) ** 2) * 700) * .065;
+      p.setXYZ(i, Math.min(.85 + y * .12, x * r) - split, Math.max(-.66, Math.min(.72 - x * .12 + z * .09, y * r)), Math.min(.86 - x * .07, z * r));
+      const tone = .97 + fbm(x * 9 + variant, z * 8 + y * 5, 3) * .07 - split * 1.2; c.set([tone, tone, tone * .994], i * 3);
+    }
+    geo.setAttribute('color', new Float32BufferAttribute(c, 3)); geo.computeVertexNormals(); return geo;
   };
-  for (let i = 0; i < mainIndex.count; i += 3) {
-    const a = mainIndex.getX(i), b = mainIndex.getX(i + 1), c = mainIndex.getX(i + 2);
-    if (!(insideSandPatch(a) && insideSandPatch(b) && insideSandPatch(c))) retainedTriangles.push(a, b, c);
-  }
-  mainland.geometry.setIndex(retainedTriangles);
-  const sandPosition: number[] = [], sandColor: number[] = [], sandIndex: number[] = [];
-  const sandRows = 280, sandColumns = 24;
-  for (let row = 0; row <= sandRows; row++) {
-    const z = 490 - row / sandRows * 1010;
-    for (let column = 0; column <= sandColumns; column++) {
-      const inland = -18 + column / sandColumns * 124;
-      const x = shoreX(z) - inland;
-      const ripples = Math.sin(inland * 1.2 + fbm(z * .02, inland * .1, 2) * 2) * .035;
-      sandPosition.push(x, height(x, z) + .075 + ripples, z);
-      sandColor.push(1.0, 1.0, .995);
-    }
-  }
-  for (let row = 0; row < sandRows; row++) for (let column = 0; column < sandColumns; column++) {
-    const a = row * (sandColumns + 1) + column, b = a + sandColumns + 1;
-    sandIndex.push(a, b, a + 1, a + 1, b, b + 1);
-  }
-  const sandGeometry = new BufferGeometry();
-  sandGeometry.setAttribute('position', new Float32BufferAttribute(sandPosition, 3));
-  sandGeometry.setAttribute('color', new Float32BufferAttribute(sandColor, 3));
-  sandGeometry.setIndex(sandIndex);
-  sandGeometry.computeVertexNormals();
-  const sandMaterial = landscapeMaterial({ biome: 'coast', scale: 14, normalStrength: .56 });
-  sandMaterial.polygonOffset = true;
-  sandMaterial.polygonOffsetFactor = -1;
-  sandMaterial.polygonOffsetUnits = -1;
-  const sand = new Mesh(sandGeometry, sandMaterial);
-  sand.name = '局部细分潮汐沙台';
-  sand.receiveShadow = true;
-  group.add(sand);
-
-  const water = createWater({
-    size: 6500, height: 0.12, color: 0x177e88,
-    amplitude: 0.44, distortion: 4.6, sunDirection: new Vector3(-0.7, 0.75, -0.3).normalize(),
-  });
-  // Keep the long ocean horizon, while resolving the 45–65 m swells in the bay.
-  // Uniform spacing across the entire ocean would undersample the visible waves.
-  const waterPosition = water.geometry.getAttribute('position');
-  const concentrateOceanGrid = (coordinate: number) => {
-    const u = Math.abs(coordinate) / 3250;
-    const distance = u <= 0.8 ? u * 800 : 640 + Math.pow((u - 0.8) / 0.2, 1.6) * 2610;
-    return Math.sign(coordinate) * distance;
-  };
-  for (let i = 0; i < waterPosition.count; i++) {
-    waterPosition.setXY(i, concentrateOceanGrid(waterPosition.getX(i)), concentrateOceanGrid(waterPosition.getY(i)));
-  }
-  waterPosition.needsUpdate = true;
-  water.geometry.computeBoundingSphere();
-  group.add(water);
-
-  // A feathered surf ribbon follows the actual sand / sea boundary.
-  const surfVertices: number[] = [];
-  const surfUvs: number[] = [];
-  const surfIndices: number[] = [];
-  const surfSteps = 420;
-  const ribbonSteps = 10;
-  for (let i = 0; i <= surfSteps; i++) {
-    const z = 560 - i / surfSteps * 1680;
-    for (let j = 0; j <= ribbonSteps; j++) {
-      const outward = j / ribbonSteps * 30;
-      surfVertices.push(shoreX(z) + outward, 0.46, z);
-      surfUvs.push(outward, z);
-    }
-  }
-  for (let i = 0; i < surfSteps; i++) {
-    for (let j = 0; j < ribbonSteps; j++) {
-      const a = i * (ribbonSteps + 1) + j;
-      const b = a + ribbonSteps + 1;
-      surfIndices.push(a, b, a + 1, a + 1, b, b + 1);
-    }
-  }
-  const surfGeometry = new BufferGeometry();
-  surfGeometry.setAttribute('position', new Float32BufferAttribute(surfVertices, 3));
-  surfGeometry.setAttribute('uv', new Float32BufferAttribute(surfUvs, 2));
-  surfGeometry.setIndex(surfIndices);
-  const surfMaterial = new ShaderMaterial({
-    transparent: true, depthWrite: false, side: DoubleSide,
-    uniforms: { time: { value: 0 } },
-    vertexShader: `
-      varying vec2 vSurf;
-      uniform float time;
-      void main() {
-        vSurf = uv;
-        vec3 p = position;
-        p.y += sin(p.z * .056 + time * .7) * .10;
-        gl_Position = projectionMatrix * modelViewMatrix * vec4(p, 1.0);
-      }
-    `,
-    fragmentShader: `
-      varying vec2 vSurf;
-      uniform float time;
-      float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
-      float foamNoise(vec2 p) {
-        vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
-        return mix(mix(hash(i), hash(i + vec2(1.0, 0.0)), f.x),
-          mix(hash(i + vec2(0.0, 1.0)), hash(i + vec2(1.0)), f.x), f.y);
-      }
-      void main() {
-        float x = vSurf.x;
-        float along = foamNoise(vec2(vSurf.y * .029, 4.0));
-        float phase = x * .41 + time * .96 + along * 2.8;
-        float breaker = pow(max(0.0, sin(phase)), 18.0);
-        float detail = foamNoise(vec2(vSurf.y * 1.3, x * 2.4 - time * .11));
-        float breakup = foamNoise(vec2(vSurf.y * .20 + time * .02, x * .7));
-        float edge = smoothstep(0.0, 1.1, x) * (1.0 - smoothstep(7.0, 30.0, x));
-        float lace = smoothstep(.28, .66, detail + breakup * .27);
-        float backwash = exp(-x * .22) * (.5 + .5 * sin(time * .47 + along * 5.0));
-        float alpha = (breaker * .49 + backwash * .14) * edge * lace * (.52 + breakup * .48);
-        gl_FragColor = vec4(.87, .94, .92, alpha);
-        #include <tonemapping_fragment>
-        #include <colorspace_fragment>
-      }
-    `,
-  });
-  const surf = new Mesh(surfGeometry, surfMaterial);
-  surf.renderOrder = 2;
-  group.add(surf);
-
-  // Three fractured shapes make separate angular slabs, worn blocks and narrow fins.
-  const makeGranite = (variant: number, detail: number) => {
-    const geometry = new IcosahedronGeometry(1, detail);
-    const position = geometry.getAttribute('position');
-    const colors: number[] = [];
-    for (let i = 0; i < position.count; i++) {
-      const x = position.getX(i), y = position.getY(i), z = position.getZ(i);
-      const crag = 1 + fbm(x * 3.9 + variant * 31, z * 3.4 + y * 2.7, 4) * .30;
-      const cutX = Math.min(.78 + y * .15, Math.max(-.82, x * crag + y * .10));
-      const cutY = Math.max(-.64, Math.min(.65 - x * .18 + z * .09, y * crag));
-      const cutZ = Math.max(-.80 - y * .06, Math.min(.84 + x * .11, z * crag));
-      position.setXYZ(i, cutX, cutY, cutZ);
-      const fissure = Math.exp(-Math.abs(y + x * .18 - .15) * 36) * .13;
-      const shade = .84 + Math.max(0, y) * .12 - fissure;
-      colors.push(shade, shade * .99, shade * .965);
-    }
-    geometry.setAttribute('color', new Float32BufferAttribute(colors, 3));
-    geometry.computeVertexNormals();
-    return geometry;
-  };
-  const transform = new Matrix4();
-  const rotation = new Quaternion();
-  const stoneMaterial = detailMaterial('rock', 0xf5f5ed, 3.3);
+  const stoneMaterial = detailMaterial('rock', 0xffffff, 2), matrix = new Matrix4(), q = new Quaternion(), pos = new Vector3(), scale = new Vector3();
+  const heroLocations = [[136,582,.55],[128,566,.38],[116,548,.82],[97,525,.44],[110,568,.36],[122,578,.42],
+    [157,594,.58],[150,572,.42],[85,514,.62],[137,560,.33],[76,492,.51],[135,596,.26]];
   for (let variant = 0; variant < 3; variant++) {
-    const rocks = new InstancedMesh(makeGranite(variant, 4), stoneMaterial, 38);
-    rocks.name = `海蚀花岗岩 ${variant + 1}`;
-    for (let i = 0; i < 38; i++) {
-      const close = i < 11;
-      const z = close ? 60 + random() * 150 : -660 + random() * 1100;
-      const inland = close ? -2 + random() * 42 : 5 + random() * 47;
-      const x = shoreX(z) - inland;
-      const scale = close ? 1.7 + random() * 3.4 : .7 + random() * 2.5;
-      rotation.setFromEuler(new Euler(random() * .28 - .14, random() * Math.PI * 2, random() * .35 - .17));
-      transform.compose(new Vector3(x, height(x, z) + scale * .22, z), rotation,
-        new Vector3(scale * (variant === 0 ? 1.5 : .95), scale * (variant === 2 ? 1.1 : .60), scale * (.8 + random() * .65)));
-      rocks.setMatrixAt(i, transform);
-      const wet = inland < 6 ? .70 : .89 + random() * .11;
-      rocks.setColorAt(i, new Color(wet, wet, wet * .99));
-    }
-    rocks.receiveShadow = true;
-    rocks.castShadow = true;
-    group.add(rocks);
+    const list = heroLocations.filter((_,i) => i % 3 === variant), stones = new InstancedMesh(makeStone(variant, true), stoneMaterial, list.length);
+    list.forEach(([x,z,size],i) => {
+      pos.set(x,heightAt(x,z)+size*.23,z); q.setFromEuler(new Euler(random()*.24,random()*Math.PI*2,random()*.22)); scale.set(size*(1.28+variant*.13),size*.78,size);
+      stones.setMatrixAt(i,matrix.compose(pos,q,scale)); stones.setColorAt(i,new Color().setScalar(1-Math.max(0,1-heightAt(x,z)/2)*.23));
+    });
+    stones.name='近景裂隙花岗岩 '+(variant+1); stones.receiveShadow=true; stones.castShadow=true; group.add(stones);
   }
-
-  // Scree fans gather below the broken seaward faces instead of filling the beach.
-  const scree = new InstancedMesh(makeGranite(7, 1), stoneMaterial, 420);
-  scree.name = '坡脚侵蚀碎石';
-  for (let i = 0; i < 420; i++) {
-    const z = -690 + random() * 505;
-    const x = shoreX(z) - (90 + random() * 155);
-    const y = height(x, z);
-    const scale = .55 + Math.pow(random(), 2.5) * 2.8;
-    rotation.setFromEuler(new Euler(random() * .6, random() * Math.PI * 2, random() * .8));
-    transform.compose(new Vector3(x, y + scale * .16, z), rotation,
-      new Vector3(scale * 1.2, scale * .54, scale * (.7 + random())));
-    scree.setMatrixAt(i, transform);
-    const c = .76 + random() * .24;
-    scree.setColorAt(i, new Color(c, c * .99, c * .97));
+  const rocks=new InstancedMesh(makeStone(5,false),stoneMaterial,270); let count=0;
+  for(let attempt=0;attempt<8000&&count<rocks.count;attempt++){
+    const x=-2230+random()*2410,z=-140+random()*535,y=heightAt(x,z);if(y<-.2||y>18||(x> -160&&z>115&&z<345))continue;
+    const size=.35+random()**2*2.7;pos.set(x,y+size*.14,z);q.setFromEuler(new Euler(random()*.5,random()*Math.PI*2,random()*.6));scale.set(size*1.35,size*.65,size);
+    rocks.setMatrixAt(count,matrix.compose(pos,q,scale));rocks.setColorAt(count++,new Color().setScalar(.80+random()*.20));
   }
-  scree.receiveShadow = true;
-  group.add(scree);
-
-  const shingle = new InstancedMesh(makeGranite(12, 1), stoneMaterial, 380);
-  shingle.name = '高潮线细砾';
-  for (let i = 0; i < 380; i++) {
-    const z = -300 + random() * 735;
-    const inland = 16 + Math.sin(z * .031) * 5 + random() * 10;
-    const x = shoreX(z) - inland;
-    const scale = .09 + random() * .30;
-    rotation.setFromEuler(new Euler(random() * .2, random() * Math.PI * 2, random() * .2));
-    transform.compose(new Vector3(x, height(x, z) + scale * .1, z), rotation,
-      new Vector3(scale * 1.4, scale * .5, scale));
-    shingle.setMatrixAt(i, transform);
-    const c = .62 + random() * .30;
-    shingle.setColorAt(i, new Color(c, c * .98, c * .91));
+  rocks.count=count;rocks.name='岸边冲蚀块石';rocks.receiveShadow=true;rocks.castShadow=true;group.add(rocks);
+  const pebbleGeo=new IcosahedronGeometry(1,1);pebbleGeo.setAttribute('color',new Float32BufferAttribute(new Float32Array(pebbleGeo.getAttribute('position').count*3).fill(1),3));
+  const pebbles=new InstancedMesh(pebbleGeo,detailMaterial('rock',0xf5f3ee,2),1350);count=0;
+  for(let attempt=0;attempt<16000&&count<pebbles.count;attempt++){
+    const x=35+random()*260,z=430+random()*285,y=heightAt(x,z);if(y<.8||y>7.3||fbm(x*.08,z*.06,3)<-.06||random()<.42)continue;
+    const size=.025+random()**3*.17;pos.set(x,y+size*.24+.06,z);q.setFromEuler(new Euler(random()*.35,random()*Math.PI*2,random()*.2));scale.set(size*1.35,size*.54,size);
+    pebbles.setMatrixAt(count,matrix.compose(pos,q,scale));pebbles.setColorAt(count++,new Color().setScalar(.61+random()*.38));
   }
-  shingle.receiveShadow = true;
-  group.add(shingle);
+  pebbles.count=count;pebbles.name='不均匀潮线卵石';pebbles.receiveShadow=true;group.add(pebbles);
+  addScannedRocks(group,[
+    {x:129,z:594,size:1.35,yaw:.7},{x:120,z:590,size:.78,yaw:2.3},
+    {x:127,z:617,size:1.1,yaw:4.1},{x:112,z:557,size:1.6,yaw:1.4},
+  ],heightAt);
 
-  // A low distant headland gives the open water a real horizon and a sense of scale.
-  const islandHeight = (x: number, z: number) => {
-    const ridge = ridgeHeight(x, z, [
-      [290, -1530, 0], [445, -1512, 126], [565, -1541, 103],
-      [680, -1580, 178], [773, -1564, 86], [880, -1611, 105], [1090, -1630, 0],
-    ], 129, 178);
-    return ridge > 0 ? ridge + fbm(x * 0.04, z * 0.04, 3) * Math.min(10, ridge * 0.16) - 4 : -10;
-  };
-  group.add(createTerrain({
-    width: 1000, depth: 650, centerX: 650, centerZ: -1550, segments: 96,
-    height: islandHeight, material: landscapeMaterial({ biome: 'coast', tint: 0xf2f4f0, scale: 27, normalStrength: .75 }),
-  }));
-
-  // Seabirds are small silhouettes with gently articulated wings, not scene props.
-  const birdGeometry = new BufferGeometry();
-  birdGeometry.setAttribute('position', new Float32BufferAttribute([
-    0, 0, .3, -1.7, .16, -.08, -.30, 0, -.16,
-    0, 0, .3, .30, 0, -.16, 1.7, .16, -.08,
-  ], 3));
-  birdGeometry.computeVertexNormals();
-  const birds = new InstancedMesh(birdGeometry, new MeshStandardMaterial({
-    color: 0x65706e, roughness: 1, side: DoubleSide,
-  }), 7);
-  const birdTracks = Array.from({ length: 7 }, (_, i) => ({
-    x: -65 + i * 19, y: 30 + random() * 18, z: -270 - random() * 180,
-    phase: random() * Math.PI * 2, speed: 0.08 + random() * 0.06,
-  }));
-  birds.frustumCulled = false;
-  group.add(birds);
-
-  return {
-    heightAt: height,
-    group,
-    view: {
-      position: new Vector3(90, 24, 160), target: new Vector3(-30, 25, -390),
-      fov: 58, minDistance: 300, maxDistance: 880, azimuthRange: 0.34, polarRange: 0.14,
-    },
-    atmosphere: {
-      fogColor: 0xa8c7cf, fogDensity: 0.00031,
-      sunPosition: new Vector3(-900, 1050, -450), sunColor: 0xfff4df,
-      sunIntensity: 2.25, exposure: 1.12, skyRotation: 0.8,
-    },
-    collectibles: [
-      { position: new Vector3(-106, 10, -320), name: '北极白沙', message: '豪克兰湾的浅色细沙与清澈海水，让北极圈内也拥有一片明亮海岸。' },
-      { position: new Vector3(70, 6, -270), name: '大西洋涌浪', message: '波浪越过挪威海，在浅湾中变得透亮，抵岸时化作一道细细的白沫。' },
-      { position: new Vector3(-245, height(-245, -835) + 20, -835), name: '海岸山脊', message: '罗弗敦陡峭的古老岩峰从海面拔起，冰川曾沿着山谷雕刻出岛屿的轮廓。' },
+  return {group,heightAt,
+    view:{position:new Vector3(145,Math.max(4,heightAt(145,610)+5),610),target:new Vector3(-1400,15,0),fov:55,minDistance:1050,maxDistance:2000,azimuthRange:.18,polarRange:.065},
+    atmosphere:{fogColor:0xb9c9cb,fogDensity:.00012,sunPosition:new Vector3(-1250,1400,-1000),sunColor:0xfff6e9,sunIntensity:2.45,exposure:1.03,skyRotation:1.13},
+    collectibles:[
+      {position:new Vector3(-750,heightAt(-750,80)+10,80),name:'北极白沙',message:'豪克兰湾真实海岸轮廓：低缓的浅色沙滩，被古老的花岗岩山脊环抱。'},
+      {position:new Vector3(-980,6,320),name:'大西洋涌浪',message:'挪威海的涌浪进入浅湾，在潮线前分裂成细小的白沫。'},
+      {position:new Vector3(-1180,heightAt(-1180,-130)+25,-130),name:'海岸山脊',message:'主要山势参考豪克兰湾和曼嫩山周边的公开高程资料，保留真实的地貌比例。'},
     ],
-    update: (elapsed) => {
-      water.material.uniforms.time.value = elapsed * 0.72;
-      surfMaterial.uniforms.time.value = elapsed;
-      birdTracks.forEach((bird, i) => {
-        const a = elapsed * bird.speed + bird.phase;
-        const q = new Quaternion().setFromAxisAngle(new Vector3(0, 1, 0), -a);
-        transform.compose(
-          new Vector3(bird.x + Math.sin(a) * 40, bird.y + Math.sin(a * 1.7) * 3, bird.z + Math.cos(a) * 28),
-          q, new Vector3(1, .7 + Math.sin(elapsed * 2.1 + bird.phase) * .35, 1),
-        );
-        birds.setMatrixAt(i, transform);
-      });
-      birds.instanceMatrix.needsUpdate = true;
-    },
+    update:elapsed=>{water.material.uniforms.time.value=elapsed*.66;foamMaterial.uniforms.time.value=elapsed;},
   };
 }
