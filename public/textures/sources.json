@@ -1,0 +1,65 @@
+[
+  {
+    "license": "CC0",
+    "source": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/snow_02/snow_02_diff_1k.jpg",
+    "authorPage": "https://polyhaven.com/a/snow_02",
+    "asset": "snow_02",
+    "file": "snow-diff.jpg"
+  },
+  {
+    "license": "CC0",
+    "source": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/snow_02/snow_02_nor_gl_1k.jpg",
+    "authorPage": "https://polyhaven.com/a/snow_02",
+    "asset": "snow_02",
+    "file": "snow-normal.jpg"
+  },
+  {
+    "license": "CC0",
+    "source": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/coast_sand_01/coast_sand_01_diff_1k.jpg",
+    "authorPage": "https://polyhaven.com/a/coast_sand_01",
+    "asset": "coast_sand_01",
+    "file": "sand-diff.jpg"
+  },
+  {
+    "license": "CC0",
+    "source": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/coast_sand_01/coast_sand_01_nor_gl_1k.jpg",
+    "authorPage": "https://polyhaven.com/a/coast_sand_01",
+    "asset": "coast_sand_01",
+    "file": "sand-normal.jpg"
+  },
+  {
+    "license": "CC0",
+    "source": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/aerial_grass_rock/aerial_grass_rock_diff_1k.jpg",
+    "authorPage": "https://polyhaven.com/a/aerial_grass_rock",
+    "asset": "aerial_grass_rock",
+    "file": "grass-diff.jpg"
+  },
+  {
+    "license": "CC0",
+    "source": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/aerial_grass_rock/aerial_grass_rock_nor_gl_1k.jpg",
+    "authorPage": "https://polyhaven.com/a/aerial_grass_rock",
+    "asset": "aerial_grass_rock",
+    "file": "grass-normal.jpg"
+  },
+  {
+    "license": "CC0",
+    "source": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/rock_boulder_dry/rock_boulder_dry_diff_1k.jpg",
+    "authorPage": "https://polyhaven.com/a/rock_boulder_dry",
+    "asset": "rock_boulder_dry",
+    "file": "rock-diff.jpg"
+  },
+  {
+    "license": "CC0",
+    "source": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/rock_boulder_dry/rock_boulder_dry_nor_gl_1k.jpg",
+    "authorPage": "https://polyhaven.com/a/rock_boulder_dry",
+    "asset": "rock_boulder_dry",
+    "file": "rock-normal.jpg"
+  },
+  {
+    "license": "CC0",
+    "source": "https://dl.polyhaven.org/file/ph-assets/HDRIs/hdr/2k/kloppenheim_06_puresky_2k.hdr",
+    "authorPage": "https://polyhaven.com/a/kloppenheim_06_puresky",
+    "asset": "kloppenheim_06_puresky",
+    "file": "sky.hdr"
+  }
+]
